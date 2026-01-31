@@ -28,6 +28,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "poc"))
 from src.domain.telemetry import Telemetry, Position
 from src.domain.fault_registry import FaultModelRegistry
 from src.domain.rf_loss_burst import RFLossBurstFault
+from src.domain.gnss_multipath import GNSSMultipathFault
+from src.domain.ekf_unhealthy import EKFUnhealthyFault
+from src.domain.thrust_shortfall import ThrustShortfallFault
+from src.domain.battery_sag import BatterySagFault
 from src.adapters.mqtt_broker import MQTTBrokerAdapter
 
 
@@ -70,7 +74,11 @@ def run_mqtt_demo(
     print("[Setup] Initializing fault models...")
     registry = FaultModelRegistry()
     registry.register("RF_LOSS_BURST", RFLossBurstFault)
-    print("[Setup] ✅ RF_LOSS_BURST fault registered")
+    registry.register("GNSS_MULTIPATH", GNSSMultipathFault)
+    registry.register("EKF_UNHEALTHY", EKFUnhealthyFault)
+    registry.register("THRUST_SHORTFALL", ThrustShortfallFault)
+    registry.register("BATTERY_SAG", BatterySagFault)
+    print(f"[Setup] ✅ Registered {len(registry.list_registered())} fault models: {', '.join(registry.list_registered())}")
     
     # Create fault instance
     fault = registry.create(
