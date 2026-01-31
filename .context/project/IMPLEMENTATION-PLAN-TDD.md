@@ -161,19 +161,22 @@ Repeat for every feature.
 
 ## Sprint 1: Core Architecture + Fault Injection (10 SP, 1 week)
 
-### Phase 1.1: PoC - Fault Injection with Registry (2 SP, Day 1)
+### Phase 1.1: PoC - Fault Injection with Registry ✅ COMPLETE (2026-01-31)
 
 **Goal:** Working demo of hexagonal architecture with 1 fault model
 
 **Deliverables:**
-- ✅ Domain entities (Telemetry)
-- ✅ FaultModel interface
-- ✅ RFLossBurstFault (TDD)
-- ✅ FaultModelRegistry
-- ✅ MessageBroker port + InMemoryBroker adapter
-- ✅ 100% unit test coverage
-- ✅ Integration test with InMemoryBroker
-- ✅ Runnable demo script
+- ✅ Domain entities (Telemetry, Position) - DONE
+- ✅ FaultModel interface - DONE
+- ✅ RFLossBurstFault (TDD) - DONE (bug fixed: initialization timing)
+- ✅ FaultModelRegistry - DONE
+- ✅ MessageBroker port + InMemoryBroker adapter - DONE
+- ✅ 100% unit test coverage (22/22 tests passing) - DONE
+- ✅ Integration test with InMemoryBroker - DONE
+- ✅ Runnable demo script - DONE
+- ✅ Documentation (README, QUICKSTART) - DONE
+
+**Result:** Architecture validated, test-first workflow proven, ready for Phase 1.2
 
 **Story 1.1.1: Core Domain Entities (TDD)**
 - **SP:** 1

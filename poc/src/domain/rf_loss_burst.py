@@ -29,9 +29,12 @@ class RFLossBurstFault(FaultModel):
         now = time.time()
         drone_id = telemetry.drone_id
         
-        # Initialize tracking for this drone
+        # Initialize tracking for this drone (far enough in past that burst ended)
         if drone_id not in self._last_burst:
-            self._last_burst[drone_id] = 0.0
+            # Last burst was so long ago that: 
+            # 1) It ended (burst_age >= down_sec)
+            # 2) But not long enough to trigger new burst (time_since_last < every_sec)
+            self._last_burst[drone_id] = now - self.down_sec - 1.0
         
         # Check if it's time to start a new burst
         time_since_last = now - self._last_burst[drone_id]
