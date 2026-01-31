@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Recommendation",
+  "type": "object",
+  "required": ["recommendationId", "ts", "scope", "severity", "summary", "evidence", "proposed_action"],
+  "properties": {
+    "recommendationId": { "type": "string" },
+    "ts": { "type": "string" },
+    "scope": { "type": "string", "enum": ["DRONE", "GROUP", "FLEET"] },
+    "severity": { "type": "string", "enum": ["INFO", "WARN", "CRITICAL"] },
+    "summary": { "type": "string" },
+    "evidence": { "type": "object" },
+    "proposed_action": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "type": "string", "enum": ["HOLD", "RTL", "LAND", "SWAP_ROLE", "REDUCE_SPEED", "REPLAN"] },
+        "targetDroneId": { "type": "string" },
+        "details": { "type": "object" },
+        "requires_human_approve": { "type": "boolean", "default": true }
+      }
+    }
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Telemetry",
+  "type": "object",
+  "required": ["droneId", "ts", "pos", "mode", "armed", "battery", "link"],
+  "properties": {
+    "droneId": { "type": "string" },
+    "ts": { "type": "string", "description": "RFC3339 timestamp" },
+    "pos": {
+      "type": "object",
+      "required": ["lat", "lon", "alt_m"],
+      "properties": {
+        "lat": { "type": "number" },
+        "lon": { "type": "number" },
+        "alt_m": { "type": "number" },
+        "vel_mps": { "type": "number" }
+      }
+    },
+    "mode": { "type": "string" },
+    "armed": { "type": "boolean" },
+    "battery": {
+      "type": "object",
+      "required": ["pct", "voltage_v", "current_a"],
+      "properties": {
+        "pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "voltage_v": { "type": "number" },
+        "current_a": { "type": "number" },
+        "sag_model": { "type": "string" }
+      }
+    },
+    "link": {
+      "type": "object",
+      "required": ["rssi", "packet_loss_pct", "jitter_ms", "last_gap_ms"],
+      "properties": {
+        "rssi": { "type": "number" },
+        "packet_loss_pct": { "type": "number", "minimum": 0, "maximum": 100 },
+        "jitter_ms": { "type": "number", "minimum": 0 },
+        "last_gap_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "nav": {
+      "type": "object",
+      "properties": {
+        "gps_fix": { "type": "string" },
+        "hdop": { "type": "number" },
+        "ekf_ok": { "type": "boolean" },
+        "ekf_variance": { "type": "number" }
+      }
+    },
+    "faults": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Active simulated fault labels"
+    }
+  }
+}
