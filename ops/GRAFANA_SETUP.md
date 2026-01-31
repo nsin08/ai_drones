@@ -71,16 +71,129 @@ pip install paho-mqtt
 python mission_simulator.py --mission all --duration 60
 ```
 
-**Option B: Single mission**
+**Expected Console Output:**
+```
+======================================================================
+🚁 DRONE FLEET MISSION SIMULATOR
+======================================================================
+MQTT Broker: localhost:1883
+Grafana Dashboard: http://localhost:3000
+Mission Duration: 60s per mission
+======================================================================
+
+🎯 Mission 1: PATROL
+Objective: Follow route with multi-drone coverage
+Formation: LEADER + POINT_MAN + 2x WINGMAN + SCOUT
+
+  📍 Waypoint 1 reached
+  📍 Waypoint 2 reached
+  ⚠️  Fault injected on PATROL-03: battery dropped to 84.2%
+  📍 Waypoint 3 reached
+  ⚠️  Fault injected on PATROL-05: battery dropped to 76.5%
+
+✅ Mission completed: 60s elapsed
+
+🎯 Mission 2: ESCORT
+Objective: Protect moving asset with safety envelope
+Formation: LEADER (on asset) + WINGMAN wedge + POINT_MAN + RELAY
+
+  ⚠️  Fault injected on ESCORT-01: battery dropped to 89.3%
+  ⚠️  Fault injected on ESCORT-04: battery dropped to 92.1%
+
+✅ Mission completed: 60s elapsed
+
+🎯 Mission 3: PERIMETER_GUARD
+Objective: Maintain watch over fixed perimeter
+Formation: LEADER (coordinator) + sector guards + roving POINT_MAN
+
+  ⚠️  Fault injected on GUARD-02: battery dropped to 81.7%
+
+✅ Mission completed: 60s elapsed
+```
+
+**Option B: Single mission (longer observation)**
 ```powershell
 # PATROL: Follow waypoint route with 5-drone formation
-python mission_simulator.py --mission patrol --duration 90
+python mission_simulator.py --mission patrol --duration 120
 
 # ESCORT: Protect moving asset with safety envelope
-python mission_simulator.py --mission escort --duration 90
+python mission_simulator.py --mission escort --duration 120
 
 # PERIMETER_GUARD: Watch fixed perimeter with sector coverage
-python mission_simulator.py --mission perimeter --duration 90
+python mission_simulator.py --mission perimeter --duration 120
+```
+
+**Option C: Custom broker/port**
+```powershell
+# If MQTT on different host
+python mission_simulator.py --mission all --broker 192.168.1.100 --port 1883 --duration 90
+```
+
+### What Each Mission Does
+
+#### PATROL Mission
+```
+5 drones follow Delhi route with coverage formation:
+
+PATROL-01 (LEADER)         → Follows waypoints: Delhi → N → E → S → W → loop
+PATROL-02 (POINT_MAN)      → Runs 60m ahead (forward scout)
+PATROL-03 (WINGMAN LEFT)   → 40m left flank
+PATROL-04 (WINGMAN RIGHT)  → 40m right flank  
+PATROL-05 (SCOUT)          → Circles perimeter (30m radius, 360°)
+
+Timeline:
+- 0s:   Formation initializes at Delhi (28.6139°N, 77.2090°E)
+- 15s:  Waypoint 1 reached (north)
+- 30s:  Waypoint 2 reached (east)
+- 45s:  Waypoint 3 reached (south)
+- 60s:  Return to start (west)
+- Plus: Random faults every 20s (30% chance)
+```
+
+#### ESCORT Mission
+```
+5 drones protect moving asset with defensive formation:
+
+ESCORT-01 (LEADER)         → Tracks moving asset (0.5m/s northeast)
+ESCORT-02 (WINGMAN LEFT)   → Left flank (30m offset)
+ESCORT-03 (WINGMAN RIGHT)  → Right flank (30m offset)
+ESCORT-04 (POINT_MAN)      → Probes 100m ahead on route
+ESCORT-05 (RELAY)          → Maintains comms anchor (50m behind)
+
+Asset Movement:
+- Simulates vehicle moving NE at 0.5m/s
+- Formation maintains protective envelope
+- All drones adjust to track asset
+
+Timeline:
+- 0s:   Asset at start, formation established
+- 30s:  Asset moved ~15m north, formation adjusted
+- 60s:  Asset moved ~30m NE, all drones repositioned
+- Plus: Random faults every 20s (30% chance)
+```
+
+#### PERIMETER_GUARD Mission
+```
+5 drones maintain watch over fixed 500m perimeter:
+
+GUARD-01 (LEADER)          → Center coordinate (28.6139°N, 77.2090°E) [loiter]
+GUARD-02 (WINGMAN SECTOR1) → NE sector (loiter, slow rotation)
+GUARD-03 (WINGMAN SECTOR2) → E sector (loiter, slow rotation)
+GUARD-04 (SCOUT SECTOR3)   → SW sector (loiter, slow rotation)
+GUARD-05 (POINT_MAN)       → Roving boundary perimeter (continuous patrol)
+
+Sector Coverage:
+- 3 guards occupy 120° spacing around perimeter
+- Rotate slowly for continuous coverage
+- POINT_MAN roves full boundary for detailed inspection
+- LEADER at center for oversight/coordination
+
+Timeline:
+- 0s:   All drones in position (LOITER mode)
+- 20s:  Sectors rotated ~10° (continuous coverage)
+- 40s:  Sectors rotated ~20°
+- 60s:  Sectors back to ~0° (full rotation cycle)
+- Plus: Random faults every 20s (30% chance)
 ```
 
 ### 4. Open Grafana Dashboard
@@ -91,42 +204,196 @@ python mission_simulator.py --mission perimeter --duration 90
 
 You should see **live telemetry** updating every second! 🎉
 
-## Dashboard Features
+## What to Expect in Grafana Dashboard
 
-### Real-Time Panels
+Wait ~5-10 seconds after starting mission for data to appear. Then watch these panels update live:
 
-| Panel | What It Shows | Mission Insight |
-|-------|---------------|-----------------|
-| **Battery Levels** | Time-series per drone | Watch battery drain, spot anomalies |
-| **Current Battery Gauges** | Live battery status | Red (<20%), Yellow (20-50%), Green (>50%) |
-| **Altitude by Drone** | Altitude profiles | See formation altitude separation |
-| **Active Missions by Type** | Mission distribution | PATROL vs ESCORT vs PERIMETER_GUARD count |
-| **Fleet Status Table** | Full drone state | drone_id, role, position, battery, mode |
-| **Drones by Mission Role** | Role distribution | LEADER, WINGMAN, POINT_MAN, SCOUT, RELAY |
-| **Active Faults Count** | Fault events | Injected faults during mission |
+### Panel 1: Battery Levels Time-Series (Top Left)
+```
+Shows battery % over time for all 5 drones
+
+PATROL Mission Example (0-60s):
+┌─────────────────────────────────────┐
+│ 100%│    PATROL-01 ╱╲              │
+│     │             ╱  ╲╱╲           │ PATROL-01 (LEADER)
+│  90%│ PATROL-02  ╱      ╲╱╲        │ PATROL-02 (POINT_MAN)
+│     │           ╱          ╲      │ PATROL-03 (WINGMAN)
+│  80%│ PATROL-03 ╱   ⚠️ FAULT      │ PATROL-04 (WINGMAN)
+│     │         ╱     (drops 15%)   │ PATROL-05 (SCOUT)
+│  70%│ PATROL-04,05                │
+│     │ (smooth decline)             │
+└─────────────────────────────────────┘
+     0s          30s         60s
+
+What to watch:
+- All drones drain ~0.1% per second (natural)
+- Random drops of 5-15% (fault injection) 
+- Identify fault patterns
+- LEADER typically higher (less movement)
+```
+
+### Panel 2: Current Battery Gauges (Top Right)
+```
+Live battery status with color coding
+
+PATROL Mission (at 30s):
+┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐
+│ 97%  │  │ 94%  │  │ 79%  │  │ 96%  │  │ 91%  │
+│  🟢  │  │  🟢  │  │  🟡  │  │  🟢  │  │  🟢  │
+│P-01  │  │P-02  │  │P-03* │  │P-04  │  │P-05  │
+└──────┘  └──────┘  └──────┘  └──────┘  └──────┘
+
+* = Recently faulted (battery dropped)
+
+Color Legend:
+🔴 Red   (<20%):  Critical - land immediately
+🟡 Yellow (20-50%): Warning - prepare for landing
+🟢 Green (>50%):   Healthy - continue mission
+
+Timeline Progression:
+- 0s:  All 🟢 (100%)
+- 30s: Most 🟢, occasional 🟡 after faults
+- 60s: All drained to ~95% (natural wear)
+```
+
+### Panel 3: Altitude by Drone (Bottom Left)
+```
+Altitude profiles showing formation height separation
+
+PATROL Mission Example:
+┌─────────────────────────────────────┐
+│ 65m │                   PATROL-05  │
+│     │                   (SCOUT)    │
+│ 55m │                   ╱╲╱╲       │
+│     │  ╱╲╱╲╱╲╱╲╱╲╱╲╱╲╱            │
+│ 50m │ PATROL-01,02,03,04            │
+│     │ (formation)                    │
+│ 45m │                                │
+└─────────────────────────────────────┘
+     0s          30s         60s
+
+What to watch:
+- PATROL-05 (SCOUT) higher (~60m) for perimeter visibility
+- Other 4 drones maintain ~50m (formation cohesion)
+- Steady altitude = good GPS + stable flight
+- Altitude drops may indicate THRUST_SHORTFALL fault injection
+
+ESCORT Mission: All drones at ~40m (tight envelope)
+PERIMETER_GUARD: Mix of 50m (sectors) + 70m (LEADER center)
+```
+
+### Panel 4: Active Missions Pie Chart (Top Right, after 60s)
+```
+Distribution of active mission types during "all" run
+
+At Different Times:
+┌─────────┐  0-60s:   PATROL (100%)
+│ PATROL  │  ✅ PATROL-01,02,03,04,05 active
+│  100%   │
+│  [████] │  60-120s: ESCORT (100%)
+└─────────┘  ✅ ESCORT-01,02,03,04,05 active
+             120-180s: PERIMETER_GUARD (100%)
+             ✅ GUARD-01,02,03,04,05 active
+
+Each mission runs sequentially, chart updates between transitions.
+```
+
+### Panel 5: Fleet Status Table (Center, Full Width)
+```
+Real-time snapshot of all drone states
+
+Drone ID         Mission Type   Role        Lat      Lon      Alt   Battery  Mode  Status
+─────────────────────────────────────────────────────────────────────────────────────────
+PATROL-01        PATROL         LEADER      28.615  77.210   50.0   95.2%   AUTO  IN_PROGRESS
+PATROL-02        PATROL         POINT_MAN   28.620  77.215   45.0   94.1%   AUTO  IN_PROGRESS
+PATROL-03        PATROL         WINGMAN     28.610  77.205   50.0   79.3%   AUTO  IN_PROGRESS ⚠️ (faulted)
+PATROL-04        PATROL         WINGMAN     28.610  77.215   50.0   96.1%   AUTO  IN_PROGRESS
+PATROL-05        PATROL         SCOUT       28.613  77.208   60.5   91.2%   AUTO  IN_PROGRESS
+
+Updates every 1 second! Watch coordinates change in real-time:
+- PATROL-01 lat increases (moving north on route)
+- PATROL-02 leads ahead
+- PATROL-05 traces circle pattern (lon/lat orbit)
+```
+
+### Panel 6: Drones by Mission Role (Bottom Left)
+```
+Distribution of roles across fleet
+
+PATROL Mission:
+┌─────────────┐
+│  LEADER 20% │  1 drone
+│  POINT_MAN  │
+│   WINGMAN   │  2 drones
+│    SCOUT    │
+│    RELAY  0%│  0 drones
+└─────────────┘
+
+ESCORT Mission:
+┌─────────────┐
+│  LEADER 20% │  
+│  POINT_MAN  │  1 each
+│   WINGMAN   │  2 drones
+│    SCOUT 0% │
+│    RELAY 20%│  1 drone (comms anchor)
+└─────────────┘
+
+PERIMETER_GUARD Mission:
+┌─────────────┐
+│  LEADER 20% │
+│  POINT_MAN  │  1 drone (roving)
+│   WINGMAN   │  2 drones (sectors)
+│    SCOUT 20%│
+│    RELAY  0%│
+└─────────────┘
+```
+
+### Panel 7: Active Faults Count (Bottom Right)
+```
+Real-time fault event counter
+
+PATROL Mission (with fault injection):
+┌──────────────────────┐
+│   Active Faults: 0   │  0s:   no faults
+│   Events: ●●●        │  20s:  ⚠️  PATROL-03 fault (-15% battery)
+│                      │  35s:  no active faults (already counted)
+└──────────────────────┘  40s:  ⚠️  PATROL-05 fault (-8% battery)
+                         55s:  no active faults
+
+Counter resets when faults expire. Spikes show when new faults injected.
+Each fault = 5-15% battery drop for ~10 seconds.
+
+Total faults injected per mission: ~2-3 (30% chance every 20s)
+```
 
 ### Observable Mission Behaviors
 
-**PATROL Mission:**
-- 📍 Watch LEADER move through waypoints
-- 🎯 POINT_MAN runs ahead (higher latitude)
-- 🛡️ WINGMAN drones flank left/right
-- 🔍 SCOUT sweeps perimeter in circular pattern
-- 📊 Altitude: SCOUT highest for visibility
+**🎯 PATROL Mission (60 seconds):**
+- 📍 Watch LEADER move through waypoints (latitude increases from 28.614→28.620)
+- 🎯 POINT_MAN runs 60m ahead on route (higher latitude/longitude)
+- 🛡️ WINGMAN drones flank left/right (symmetric about route)
+- 🔍 SCOUT sweeps perimeter in circular pattern (coordinates orbit)
+- 📊 Altitude: SCOUT highest (~60m) for visibility, others ~50m
+- ⚠️ Expect 2-3 fault events with battery drops 5-15%
+- ✅ All drones complete 4-point route and return to start
 
-**ESCORT Mission:**
-- 🚗 LEADER tracks moving asset
-- ⚔️ WINGMAN in wedge formation (forward flanks)
-- 🕵️ POINT_MAN probes ahead on route
-- 📡 RELAY maintains comms anchor (behind formation)
-- 📊 Consistent altitude for escort envelope
+**🚗 ESCORT Mission (60 seconds):**
+- 🚗 LEADER tracks moving asset continuously northeast (lat/lon increase steadily)
+- ⚔️ WINGMAN maintain fixed offsets (left/right flanks, 30m separation)
+- 🕵️ POINT_MAN probes 100m ahead on trajectory (forward scout)
+- 📡 RELAY stays 50m behind (comms anchor, loiter mode)
+- 📊 Consistent altitude ~40m (tight protective envelope)
+- ⚠️ Expect 2-3 fault events (battery drops 5-15%)
+- ✅ Asset reaches destination with formation fully intact
 
-**PERIMETER_GUARD Mission:**
-- 🎯 LEADER coordinates from center (loiter mode)
-- 🔒 WINGMAN/SCOUT occupy 3 sectors (120° spacing)
-- 🔄 Sectors rotate slowly for continuous coverage
-- 🚶 POINT_MAN roves boundary perimeter
-- 📊 Altitude: LEADER highest for oversight
+**🔒 PERIMETER_GUARD Mission (60 seconds):**
+- 🎯 LEADER stays at center coordinate (28.6139°N, 77.2090°E, loiter, 70m)
+- 🔒 3x Guards (WINGMAN/SCOUT) occupy rotating sectors (120° spacing)
+- 🔄 Watch sectors rotate slowly (~10° per 20 seconds, continuous coverage)
+- 🚶 POINT_MAN roves full boundary perimeter continuously
+- 📊 Altitude: LEADER high (70m oversight), guards ~50m, POINT_MAN ~55m
+- ⚠️ Expect 2-3 fault events (battery drops 5-15%)
+- ✅ Complete 360° coverage maintained throughout, no blind spots
 
 ## Mission Simulator Details
 
@@ -173,7 +440,58 @@ The simulator randomly injects faults:
 
 Watch the **Active Faults Count** panel spike!
 
-## Troubleshooting
+## Command Cheat Sheet
+
+### Quick Start (Copy-Paste)
+
+```powershell
+# Terminal 1: Start infrastructure
+cd d:\wsl_shared\projects\ai_drones\ops
+docker compose up -d
+```
+
+```powershell
+# Terminal 2: Run mission
+cd d:\wsl_shared\projects\ai_drones\poc
+pip install paho-mqtt
+python mission_simulator.py --mission all --duration 60
+```
+
+```powershell
+# Browser: Open dashboard
+http://localhost:3000
+# Login: admin / admin
+# Navigate: Dashboards → Drone Fleet Mission Dashboard
+```
+
+### Common Command Patterns
+
+| Goal | Command |
+|------|---------|
+| **Watch all missions back-to-back** | `python mission_simulator.py --mission all --duration 60` |
+| **Deep dive into PATROL** | `python mission_simulator.py --mission patrol --duration 120` |
+| **Deep dive into ESCORT** | `python mission_simulator.py --mission escort --duration 120` |
+| **Deep dive into PERIMETER** | `python mission_simulator.py --mission perimeter --duration 120` |
+| **Debug: Monitor MQTT messages** | `docker exec -it mosquitto-broker mosquitto_sub -t "fleet/#" -v` |
+| **Debug: Check InfluxDB data** | `docker exec -it influxdb influx query 'from(bucket:"telemetry") \|> range(start:-5m) \|> limit(n:20)'` |
+| **Restart everything** | `docker compose down && docker compose up -d` |
+| **Cleanup (full reset)** | `docker compose down -v` |
+
+### Dashboard Tabs (What to Click)
+
+1. **Grafana Home** → **Dashboards** → **Drone Fleet Mission Dashboard**
+2. OR bookmark: `http://localhost:3000/d/drone-fleet-missions`
+
+### Monitoring Checklist
+
+After starting mission simulator, watch Grafana for:
+
+- ✅ **Battery panel**: All 5 drones appear, battery declining
+- ✅ **Altitude panel**: SCOUT higher, others in formation
+- ✅ **Fleet table**: All 5 drones listed with coordinates
+- ✅ **Fault counter**: Shows 0, spikes to 1-2 during mission (if fault injected)
+- ✅ **Role distribution**: Pie chart shows LEADER/WINGMAN/POINT_MAN/SCOUT/RELAY
+- ⚠️ **No data?** Wait 10s, check MQTT bridge (see Troubleshooting)
 
 ### Services not healthy
 
