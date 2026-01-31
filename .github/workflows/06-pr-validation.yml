@@ -1,0 +1,35 @@
+name: PR Validation
+on:
+  pull_request:
+    types: [opened, edited]
+
+jobs:
+  validate-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR template completion
+        run: |
+          PR_BODY="${{ github.event.pull_request.body }}"
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          
+          # Check for placeholder text
+          if echo "$PR_BODY" | grep -qE '(TODO|FIXME|placeholder|xxx)'; then
+            echo "⚠️ PR contains placeholder text"
+          fi
+          
+          # Check for required sections
+          REQUIRED_SECTIONS=(
+            "Description"
+            "Closes"
+            "Changes"
+            "Checklist"
+          )
+          
+          for section in "${REQUIRED_SECTIONS[@]}"; do
+            if ! echo "$PR_BODY" | grep -q "$section"; then
+              echo "⚠️ Missing section: $section"
+            fi
+          done
+          
+          echo "✅ PR validation complete"
+        shell: bash

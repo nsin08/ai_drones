@@ -1,0 +1,31 @@
+name: Definition of Done
+on:
+  pull_request:
+    types: [opened, synchronize, review_requested]
+
+jobs:
+  validate-dod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check DoD criteria
+        run: |
+          PR_BODY="${{ github.event.pull_request.body }}"
+          
+          # Check for evidence mapping
+          if echo "$PR_BODY" | grep -q "Evidence Mapping"; then
+            echo "✅ Evidence mapping present"
+          else
+            echo "⚠️ Missing evidence mapping table"
+          fi
+          
+          # Check for test evidence
+          if echo "$PR_BODY" | grep -qi "test"; then
+            echo "✅ Tests mentioned"
+          else
+            echo "⚠️ No test evidence found"
+          fi
+          
+          echo "✅ Definition of Done validation complete"
+        shell: bash

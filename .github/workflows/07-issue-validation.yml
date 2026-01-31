@@ -1,0 +1,30 @@
+name: Issue Validation
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  validate-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check issue has type label
+        run: |
+          LABELS="${{ toJSON(github.event.issue.labels) }}"
+          
+          if echo "$LABELS" | grep -qE '(idea|epic|story|task)'; then
+            echo "✅ Issue has type label"
+          else
+            echo "⚠️ Issue should have a type label (idea, epic, story, task)"
+          fi
+        shell: bash
+      
+      - name: Check issue description
+        run: |
+          DESCRIPTION="${{ github.event.issue.body }}"
+          
+          if [[ -z "$DESCRIPTION" ]] || [[ ${#DESCRIPTION} -lt 10 ]]; then
+            echo "⚠️ Issue description is too brief"
+          else
+            echo "✅ Issue has adequate description"
+          fi
+        shell: bash

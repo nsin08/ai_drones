@@ -1,0 +1,22 @@
+name: Branch Protection Reference
+on:
+  workflow_dispatch
+
+jobs:
+  document-branch-protection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Branch Protection Configuration
+        run: |
+          echo "✅ Branch Protection Configuration Reference"
+          echo ""
+          echo "Apply these settings to 'main' branch:"
+          echo "- Require PR before merging: YES"
+          echo "- Require approvals: 1 (minimum)"
+          echo "- Require CODEOWNER reviews: YES"
+          echo "- Dismiss stale approvals: YES"
+          echo "- Require branch up to date: YES"
+          echo "- Required status checks: build, test, lint"
+          echo "- Restrict who can push: Maintainers only"
+          echo "- Block force pushes: YES"
+          echo "- Block deletions: YES"

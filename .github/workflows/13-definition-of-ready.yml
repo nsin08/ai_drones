@@ -1,0 +1,30 @@
+name: Definition of Ready
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  validate-dor:
+    runs-on: ubuntu-latest
+    if: contains(github.event.issue.labels.*.name, 'state:ready')
+    steps:
+      - name: Check DoR criteria
+        run: |
+          BODY="${{ github.event.issue.body }}"
+          
+          # Check for key DoR elements
+          DoR_ITEMS=(
+            "Acceptance criteria"
+            "Success criteria"
+            "Non-goals"
+            "Owner"
+          )
+          
+          for item in "${DoR_ITEMS[@]}"; do
+            if ! echo "$BODY" | grep -qi "$item"; then
+              echo "⚠️ Missing DoR item: $item"
+            fi
+          done
+          
+          echo "✅ Definition of Ready validation complete"
+        shell: bash

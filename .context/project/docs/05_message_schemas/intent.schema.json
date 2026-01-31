@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Intent",
+  "type": "object",
+  "required": ["intentId", "scope", "ts", "mission", "priority", "constraints"],
+  "properties": {
+    "intentId": { "type": "string" },
+    "scope": { "type": "string", "enum": ["DRONE", "GROUP", "FLEET"] },
+    "ts": { "type": "string" },
+    "mission": { "type": "string", "enum": ["PATROL", "ESCORT", "PERIMETER_GUARD"] },
+    "priority": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "targets": {
+      "type": "object",
+      "description": "Mission-specific target geometry or asset feed pointer"
+    },
+    "formation": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["LINE", "WEDGE", "BOX", "NONE"] },
+        "spacing_m": { "type": "number" }
+      }
+    },
+    "constraints": {
+      "type": "object",
+      "required": ["min_battery_pct", "geofence_policy"],
+      "properties": {
+        "min_battery_pct": { "type": "number" },
+        "geofence_policy": { "type": "string", "enum": ["STRICT", "WARN_ONLY"] },
+        "require_human_approve": { "type": "boolean", "default": true }
+      }
+    }
+  }
+}

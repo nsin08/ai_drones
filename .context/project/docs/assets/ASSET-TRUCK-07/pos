@@ -1,0 +1,22 @@
+{
+  "assetId": "ASSET-TRUCK-07",
+  "ts": "2026-01-31T00:00:05Z",
+  "lat": 28.6141,
+  "lon": 77.2094,
+  "heading_deg": 92,
+  "speed_mps": 8.2
+}
+
+
+
+12.3.4 Expected planner behavior (v1)
+
+LEADER: stays above/near asset center.
+
+POINT_MAN: leads ahead of asset heading by a fixed lead distance.
+
+WINGMAN: holds lateral flanks.
+
+SCOUT: checks forward/right sector (optional wider sweep).
+
+RELAY: chooses best comms spot; may lag behind.

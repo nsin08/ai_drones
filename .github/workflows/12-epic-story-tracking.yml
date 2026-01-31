@@ -1,0 +1,25 @@
+name: Epic/Story Tracking
+on:
+  issues:
+    types: [opened, edited]
+
+jobs:
+  validate-hierarchy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check artifact hierarchy
+        run: |
+          LABELS="${{ toJSON(github.event.issue.labels) }}"
+          BODY="${{ github.event.issue.body }}"
+          
+          # If it's a story, check for parent epic
+          if echo "$LABELS" | grep -q '"story"'; then
+            if echo "$BODY" | grep -qE 'Parent: #[0-9]+'; then
+              echo "✅ Story links to parent epic"
+            else
+              echo "⚠️ Story should reference parent epic: 'Parent: #X'"
+            fi
+          fi
+          
+          echo "✅ Artifact hierarchy check complete"
+        shell: bash

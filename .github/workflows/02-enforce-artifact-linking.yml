@@ -1,0 +1,36 @@
+name: Enforce Artifact Linking
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+jobs:
+  validate-artifact-linking:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR links to Issue
+        run: |
+          PR_BODY="${{ github.event.pull_request.body }}"
+          
+          # Check for "Closes #X" pattern
+          if ! echo "$PR_BODY" | grep -qE "(Closes|Resolves|Fixes) #[0-9]+"; then
+            echo "❌ PR must link to an issue: 'Closes #<issue-id>'"
+            exit 1
+          fi
+          
+          echo "✅ PR links to issue"
+        shell: bash
+      
+      - name: Validate branch naming
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          
+          # Pattern: type/number-slug
+          if ! [[ $BRANCH =~ ^(feature|fix|docs|chore|refactor|test|perf)/[0-9]+-[a-z0-9-]+$ ]]; then
+            echo "❌ Invalid branch name: $BRANCH"
+            echo "   Expected: <type>/<issue-id>-<slug>"
+            echo "   Types: feature, fix, docs, chore, refactor, test, perf"
+            exit 1
+          fi
+          
+          echo "✅ Branch naming valid"
+        shell: bash

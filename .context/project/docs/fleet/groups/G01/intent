@@ -1,0 +1,42 @@
+{
+  "intentId": "intent-Perimeter-G01-001",
+  "scope": "GROUP",
+  "ts": "2026-01-31T00:00:00Z",
+  "mission": "PERIMETER_GUARD",
+  "priority": 5,
+  "targets": {
+    "type": "PERIMETER",
+    "polygon": [
+      {"lat": 28.6148, "lon": 77.2078},
+      {"lat": 28.6156, "lon": 77.2108},
+      {"lat": 28.6132, "lon": 77.2118},
+      {"lat": 28.6124, "lon": 77.2088}
+    ],
+    "sectors": [
+      {"sectorId": "S1", "center": {"lat": 28.6152, "lon": 77.2092}, "radius_m": 60},
+      {"sectorId": "S2", "center": {"lat": 28.6142, "lon": 77.2110}, "radius_m": 60},
+      {"sectorId": "S3", "center": {"lat": 28.6129, "lon": 77.2102}, "radius_m": 60},
+      {"sectorId": "S4", "center": {"lat": 28.6136, "lon": 77.2084}, "radius_m": 60}
+    ],
+    "rotation_sec": 300,
+    "alt_band_m": {"min": 20, "max": 35}
+  },
+  "formation": {"type": "NONE", "spacing_m": 0},
+  "constraints": {
+    "min_battery_pct": 35,
+    "geofence_policy": "STRICT",
+    "require_human_approve": true
+  }
+}
+
+
+
+12.4.3 Expected planner behavior (v1)
+
+LEADER: supervises perimeter center / patrols between sectors.
+
+WINGMAN + SCOUT: occupy two sectors (LOITER).
+
+POINT_MAN: roves boundary segments (FOLLOW_PATH or GOTO sequence).
+
+RELAY: anchors near best comms point (often centroid or high ground).

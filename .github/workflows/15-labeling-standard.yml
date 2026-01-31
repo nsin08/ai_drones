@@ -1,0 +1,26 @@
+name: Labeling Standard
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  validate-labels:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check label consistency
+        run: |
+          LABELS="${{ toJSON(github.event.issue.labels) }}"
+          
+          # Check if issue has both type and state labels
+          if echo "$LABELS" | grep -qE '"(idea|epic|story|task)"'; then
+            echo "✅ Has type label"
+          else
+            echo "⚠️ Missing type label (idea, epic, story, task)"
+          fi
+          
+          if echo "$LABELS" | grep -qE '"state:[a-z-]+"'; then
+            echo "✅ Has state label"
+          else
+            echo "⚠️ Missing state label"
+          fi
+        shell: bash

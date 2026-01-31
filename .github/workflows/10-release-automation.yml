@@ -1,0 +1,24 @@
+name: Release Automation
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Extract version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+        shell: bash
+      
+      - name: Create release notes
+        run: |
+          echo "Release: ${{ steps.version.outputs.version }}"
+          echo "✅ Release automation triggered"
+        shell: bash

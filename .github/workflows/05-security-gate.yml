@@ -1,0 +1,31 @@
+name: Security Gate
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  security-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for secrets
+        run: |
+          # Simple secret pattern check
+          if grep -r -E '(password|secret|token|api[_-]?key|private[_-]?key)[\s]*=[\s]*["\x27]' . --exclude-dir=.git --exclude-dir=node_modules; then
+            echo "❌ Potential secrets found in code"
+            exit 1
+          fi
+          echo "✅ No obvious secrets detected"
+        shell: bash
+      
+      - name: Check PR description
+        run: |
+          PR_BODY="${{ github.event.pull_request.body }}"
+          
+          if [[ -z "$PR_BODY" ]]; then
+            echo "⚠️ PR description is empty"
+          else
+            echo "✅ PR has description"
+          fi
+        shell: bash

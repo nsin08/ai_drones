@@ -1,0 +1,28 @@
+name: Code Quality
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  check-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for test files
+        run: |
+          if find . -name "*test*.py" -o -name "*_test.py" | grep -q .; then
+            echo "✅ Test files found"
+          else
+            echo "⚠️ No test files detected"
+          fi
+        shell: bash
+      
+      - name: Check documentation
+        run: |
+          if [[ -f "README.md" ]]; then
+            echo "✅ README.md present"
+          else
+            echo "⚠️ README.md not found"
+          fi
+        shell: bash

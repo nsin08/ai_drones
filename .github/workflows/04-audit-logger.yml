@@ -1,0 +1,25 @@
+name: Audit Logger
+on:
+  issues:
+    types: [labeled, unlabeled, opened, closed]
+  pull_request:
+    types: [opened, closed, review_requested]
+  pull_request_review:
+    types: [submitted]
+
+jobs:
+  log-event:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log workflow event
+        run: |
+          EVENT_TYPE="${{ github.event_name }}"
+          ACTION="${{ github.event.action }}"
+          ACTOR="${{ github.actor }}"
+          TIMESTAMP="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          
+          # Create audit log entry
+          LOG_ENTRY="{\"event\": \"$EVENT_TYPE\", \"action\": \"$ACTION\", \"actor\": \"$ACTOR\", \"timestamp\": \"$TIMESTAMP\"}"
+          
+          echo "✅ Audit logged: $LOG_ENTRY"
+        shell: bash

@@ -1,0 +1,45 @@
+name: File Organization (Rule 11)
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  validate-file-placement:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check Rule 11 compliance
+        run: |
+          echo "🔍 Validating Rule 11: File Organization & Context Hygiene..."
+          
+          # Check for proper .context structure
+          if [[ -d ".context/project" ]]; then
+            echo "✅ .context/project/ exists"
+          fi
+          
+          if [[ -d ".context/sprint" ]]; then
+            echo "✅ .context/sprint/ exists"
+          fi
+          
+          # Check .gitignore for Rule 11 entries
+          if grep -q ".context/temp/" .gitignore 2>/dev/null; then
+            echo "✅ .context/temp/ in .gitignore"
+          else
+            echo "⚠️ .context/temp/ not in .gitignore"
+          fi
+          
+          if grep -q ".context/issues/" .gitignore 2>/dev/null; then
+            echo "✅ .context/issues/ in .gitignore"
+          else
+            echo "⚠️ .context/issues/ not in .gitignore"
+          fi
+          
+          if grep -q ".context/reports/" .gitignore 2>/dev/null; then
+            echo "✅ .context/reports/ in .gitignore"
+          else
+            echo "⚠️ .context/reports/ not in .gitignore"
+          fi
+          
+          echo "✅ File organization validation complete"
+        shell: bash

@@ -1,0 +1,9 @@
+# CODEOWNERS - Governance Enforcement
+# Rule 06: Only CODEOWNER can merge to main
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything
+* @nsin08
+
+# GitHub configuration and workflows (critical governance files)
+/.github/ @nsin08

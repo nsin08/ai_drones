@@ -1,0 +1,26 @@
+name: Commit Linting
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  lint-commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Check commit format
+        run: |
+          echo "🔍 Validating commit messages..."
+          
+          # Get commits in PR
+          COMMITS=$(git log origin/main..HEAD --pretty=format:"%B")
+          
+          if echo "$COMMITS" | grep -qE '^(feat|fix|docs|refactor|test|chore|perf)'; then
+            echo "✅ Commits follow conventional format"
+          else
+            echo "⚠️ Some commits may not follow conventional format"
+          fi
+        shell: bash

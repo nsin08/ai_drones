@@ -1,0 +1,56 @@
+name: Enforce State Machine
+on:
+  issues:
+    types: [labeled, unlabeled]
+
+jobs:
+  validate-state-transition:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check valid state transition
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const stateLabels = issue.labels
+              .map(l => l.name)
+              .filter(l => l.startsWith('state:'));
+            
+            const validStates = [
+              'state:idea',
+              'state:approved',
+              'state:ready',
+              'state:in-progress',
+              'state:in-review',
+              'state:done',
+              'state:released',
+              'state:rejected',
+              'state:blocked',
+              'state:on-hold'
+            ];
+            
+            // Only one state label should be present
+            if (stateLabels.length > 1) {
+              core.setFailed(`❌ Multiple state labels found: ${stateLabels.join(', ')}. Only one state allowed.`);
+              // Remove the new label if multiple states detected
+              const newLabel = context.payload.label?.name;
+              if (newLabel && newLabel.startsWith('state:')) {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.number,
+                  name: newLabel
+                });
+              }
+            }
+            
+            if (stateLabels.length === 1) {
+              const state = stateLabels[0];
+              if (!validStates.includes(state)) {
+                core.setFailed(`❌ Invalid state: ${state}`);
+              } else {
+                core.info(`✅ Valid state transition: ${state}`);
+              }
+            }
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
