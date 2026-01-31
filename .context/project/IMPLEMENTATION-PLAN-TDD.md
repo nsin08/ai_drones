@@ -176,7 +176,55 @@ Repeat for every feature.
 - ✅ Runnable demo script - DONE
 - ✅ Documentation (README, QUICKSTART) - DONE
 
-**Result:** Architecture validated, test-first workflow proven, ready for Phase 1.2
+**Result:** Architecture validated, test-first workflow proven, ready for Phase 1.2 + MVP Stack
+
+---
+
+### Phase 1.1b: MVP Tech Stack Integration ✅ COMPLETE (2026-01-31)
+
+**Goal:** Real MQTT broker with telemetry + fault injection demo
+
+**Deliverables:**
+- ✅ MQTTBrokerAdapter (production-ready) - DONE
+- ✅ Docker Compose setup (Mosquitto) - DONE
+- ✅ MQTT topic schema documentation - DONE
+- ✅ Integration demo script - DONE
+- ✅ MQTT debugging guide (MQTT.Cool) - DONE
+- ✅ MVP end-to-end demo guide - DONE
+- ✅ Integration test suite (with real broker) - DONE
+
+**Architecture:**
+```
+ArduPilot/Mission Planner → Eclipse Mosquitto MQTT Broker ← Python Fleet Services
+                                     ↓
+                             MQTT.Cool Test Client (debug)
+```
+
+**MVP Stack Components:**
+1. **Broker:** Eclipse Mosquitto on Docker (port 1883)
+2. **Fleet Services:** Python (simulator, fault injector)
+3. **Debug UI:** MQTT.Cool test client (subscribe/publish topics)
+4. **Domain:** Pure Python (0 external deps), 100% unit tested
+
+**Running MVP Demo:**
+```bash
+# Terminal 1: Start MQTT broker
+cd ops && docker-compose up -d
+
+# Terminal 2: Run integration demo
+cd poc && python ../integration/demo_mqtt.py
+
+# Terminal 3: Monitor with MQTT.Cool
+# Open MQTT.Cool → localhost:1883
+# Subscribe to: ai_drones/# (watch all topics)
+# Publish to: ai_drones/commands/D001/mission (send test commands)
+```
+
+**Result:** Readily demonstrable MVP stack with real MQTT integrations
+
+---
+
+### Phase 1.2: Complete Fault Models (3 SP, Days 2-3)
 
 **Story 1.1.1: Core Domain Entities (TDD)**
 - **SP:** 1

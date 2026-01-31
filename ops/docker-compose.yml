@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mosquitto-broker
+    ports:
+      - "1883:1883"    # Standard MQTT port
+      - "9001:9001"    # WebSocket port (optional)
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    environment:
+      TZ: UTC
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$SYS/broker/clients/connected"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - fleet-network
+
+volumes:
+  mosquitto_data:
+  mosquitto_logs:
+
+networks:
+  fleet-network:
+    driver: bridge
