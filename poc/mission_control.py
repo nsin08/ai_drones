@@ -242,11 +242,20 @@ def start_mission():
     mission_duration = duration
     
     # Launch simulator subprocess
+    # Map mission types: PERIMETER_GUARD -> perimeter
+    mission_map = {
+        'PATROL': 'patrol',
+        'ESCORT': 'escort',
+        'PERIMETER_GUARD': 'perimeter'
+    }
+    simulator_mission = mission_map.get(mission_type, mission_type.lower())
+    
     try:
         simulator_process = subprocess.Popen([
             'python', 'mission_simulator.py',
-            '--mission', mission_type.lower(),
+            '--mission', simulator_mission,
             '--duration', str(duration),
+            '--drones', str(drone_count),
             '--broker', 'localhost',
             '--port', '1883'
         ], cwd='d:\\wsl_shared\\projects\\ai_drones\\poc')
@@ -440,6 +449,76 @@ def enable_drone():
         "cmd_id": cmd_id,
         "status": "requested",
         "message": f"Enable command sent to {drone_id} (awaiting acknowledgment)"
+    })
+
+@app.route('/api/command/hold', methods=['POST'])
+def hold_drone():
+    """Command drone to hold position."""
+    data = request.json
+    drone_id = data.get('drone_id')
+    
+    if not drone_id:
+        return jsonify({"error": "drone_id required"}), 400
+    
+    cmd_id = str(uuid.uuid4())
+    command = {
+        "cmd_id": cmd_id,
+        "command": "HOLD",
+        "drone_id": drone_id,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    command_status[cmd_id] = {
+        "cmd_id": cmd_id,
+        "command": "HOLD",
+        "drone_id": drone_id,
+        "status": "REQUESTED",
+        "request_timestamp": datetime.now().isoformat()
+    }
+    
+    pending_commands[cmd_id] = command
+    mqtt_client.publish(f"fleet/{drone_id}/command", json.dumps(command))
+    socketio.emit('command_requested', command_status[cmd_id])
+    
+    return jsonify({
+        "cmd_id": cmd_id,
+        "status": "requested",
+        "message": f"Hold command sent to {drone_id}"
+    })
+
+@app.route('/api/command/return', methods=['POST'])
+def return_drone():
+    """Command drone to return to base."""
+    data = request.json
+    drone_id = data.get('drone_id')
+    
+    if not drone_id:
+        return jsonify({"error": "drone_id required"}), 400
+    
+    cmd_id = str(uuid.uuid4())
+    command = {
+        "cmd_id": cmd_id,
+        "command": "RETURN",
+        "drone_id": drone_id,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    command_status[cmd_id] = {
+        "cmd_id": cmd_id,
+        "command": "RETURN",
+        "drone_id": drone_id,
+        "status": "REQUESTED",
+        "request_timestamp": datetime.now().isoformat()
+    }
+    
+    pending_commands[cmd_id] = command
+    mqtt_client.publish(f"fleet/{drone_id}/command", json.dumps(command))
+    socketio.emit('command_requested', command_status[cmd_id])
+    
+    return jsonify({
+        "cmd_id": cmd_id,
+        "status": "requested",
+        "message": f"Return command sent to {drone_id}"
     })
 
 @app.route('/api/command/status/<cmd_id>')

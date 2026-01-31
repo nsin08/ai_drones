@@ -458,12 +458,17 @@
         
         /* ===== BOTTOM: ALTITUDE CHART ===== */
         .bottom-panel {
-            grid-column: 2 / 4;
+            grid-column: 2;
             grid-row: 3;
             background: #1a1a2e;
             border-radius: 8px;
             padding: 12px;
             border-top: 2px solid #00d4ff;
+            transition: all 0.3s ease;
+        }
+        
+        .bottom-panel.collapsed {
+            padding: 8px 12px;
         }
         
         .bottom-panel h3 {
@@ -472,10 +477,100 @@
             text-transform: uppercase;
             margin-bottom: 10px;
             font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .toggle-btn {
+            background: #2a2a4e;
+            border: 1px solid #444;
+            color: #fff;
+            padding: 4px 12px;
+            font-size: 11px;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+        
+        .toggle-btn:hover {
+            background: #3a3a5e;
+        }
+        
+        #altitudeChartContainer {
+            max-height: 120px;
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.3s ease;
+        }
+        
+        #altitudeChartContainer.collapsed {
+            max-height: 0;
+            opacity: 0;
         }
         
         #altitudeChart {
-            max-height: 180px;
+            max-height: 120px;
+        }
+        
+        /* ===== MAP LEGEND ===== */
+        .map-legend {
+            grid-column: 3;
+            grid-row: 3;
+            background: #1a1a2e;
+            border-radius: 8px;
+            padding: 12px;
+            border-top: 2px solid #e94560;
+        }
+        
+        .map-legend h3 {
+            font-size: 11px;
+            color: #e94560;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 7px;
+            font-size: 11px;
+            color: #ccc;
+        }
+        
+        .legend-color {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid #0f0f0f;
+        }
+        
+        .legend-base {
+            width: 14px;
+            height: 14px;
+            background: #FFD700;
+            clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+        }
+        
+        .drone-actions {
+            display: flex;
+            gap: 4px;
+        }
+        
+        .drone-action-btn {
+            padding: 3px 6px;
+            font-size: 9px;
+            background: #2a2a4e;
+            border: 1px solid #444;
+            color: #fff;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: background 0.2s;
+        }
+        
+        .drone-action-btn:hover {
+            background: #3a3a5e;
         }
         
         /* ===== SCROLLBAR STYLING ===== */
@@ -564,8 +659,6 @@
                     <label for="teamType">Formation Type</label>
                     <select id="teamType">
                         <option value="PATROL">Patrol Formation</option>
-                        <option value="ESCORT">Escort Formation</option>
-                        <option value="PERIMETER">Perimeter Formation</option>
                     </select>
                 </div>
                 <div class="control-group">
@@ -637,9 +730,47 @@
         </div>
 
         <!-- BOTTOM: ALTITUDE CHART -->
-        <div class="bottom-panel">
-            <h3>📊 Altitude Trend</h3>
-            <canvas id="altitudeChart"></canvas>
+        <div class="bottom-panel" id="altitudePanel">
+            <h3>
+                <span>📊 Altitude Trend</span>
+                <button class="toggle-btn" onclick="toggleAltitudeChart()" id="altitudeToggle">▼ Collapse</button>
+            </h3>
+            <div id="altitudeChartContainer">
+                <canvas id="altitudeChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- MAP LEGEND -->
+        <div class="map-legend">
+            <h3>🗺️ Map Legend</h3>
+            <div class="legend-item">
+                <div class="legend-base"></div>
+                <span>Home Base</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FFD700;"></div>
+                <span>Leader</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #FF4444;"></div>
+                <span>Point Man</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #4ECDC4;"></div>
+                <span>Wingman</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #95E1D3;"></div>
+                <span>Scout</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #C06C84;"></div>
+                <span>Guard</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #6C5B7B;"></div>
+                <span>Relay</span>
+            </div>
         </div>
     </div>
 
@@ -665,12 +796,24 @@
         };
 
         // ===== INITIALIZE MAP =====
+        let baseMarker = null;
+        let waypointMarkers = [];
         function initializeMap() {
-            map = L.map('map').setView([28.6139, 77.2090], 15);
+            map = L.map('map').setView([28.6139, 77.2090], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap',
                 maxZoom: 19
             }).addTo(map);
+            
+            // Add base marker (gold star)
+            const baseIcon = L.divIcon({
+                className: 'base-icon',
+                html: '<div style="color: #FFD700; font-size: 24px; text-shadow: 0 0 3px #000;">⭐</div>',
+                iconSize: [24, 24],
+                iconAnchor: [12, 12]
+            });
+            baseMarker = L.marker([28.6139, 77.2090], { icon: baseIcon }).addTo(map);
+            baseMarker.bindPopup('<strong style="color: #FFD700;">🏠 HOME BASE</strong><br>Delhi, India<br>28.6139°N, 77.2090°E');
         }
 
         // ===== INITIALIZE CHART =====
@@ -755,6 +898,77 @@
             document.getElementById('missionStatus').style.display = 'block';
             updateMissionStatus();
             statusInterval = setInterval(updateMissionStatus, 1000);
+            
+            // Add mission-specific markers
+            let bounds = [];
+            
+            if (data.mission_type === 'PATROL') {
+                // Add waypoint markers
+                const waypoints = [
+                    { lat: 28.6139, lon: 77.2090, name: 'WP1 (Base)' },
+                    { lat: 28.6200, lon: 77.2150, name: 'WP2 (North)' },
+                    { lat: 28.6180, lon: 77.2200, name: 'WP3 (East)' },
+                    { lat: 28.6100, lon: 77.2080, name: 'WP4 (South)' }
+                ];
+                
+                waypoints.forEach((wp, idx) => {
+                    const icon = L.divIcon({
+                        className: 'waypoint-icon',
+                        html: `<div style="background: #00d4ff; color: #000; border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: bold; border: 3px solid #fff; box-shadow: 0 0 5px rgba(0,212,255,0.8);">${idx + 1}</div>`,
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    });
+                    const marker = L.marker([wp.lat, wp.lon], { icon }).addTo(map);
+                    marker.bindPopup(`<strong style="color: #00d4ff;">${wp.name}</strong><br>${wp.lat.toFixed(4)}, ${wp.lon.toFixed(4)}`);
+                    waypointMarkers.push(marker);
+                    bounds.push([wp.lat, wp.lon]);
+                });
+                
+                // Draw waypoint path
+                const pathCoords = waypoints.map(wp => [wp.lat, wp.lon]);
+                pathCoords.push(pathCoords[0]); // Close the loop
+                const pathLine = L.polyline(pathCoords, {
+                    color: '#00d4ff',
+                    weight: 2,
+                    opacity: 0.6,
+                    dashArray: '5, 10'
+                }).addTo(map);
+                waypointMarkers.push(pathLine);
+            } else if (data.mission_type === 'ESCORT') {
+                // Add escort path
+                const escortPath = [
+                    [28.6139, 77.2090],
+                    [28.6180, 77.2140],
+                    [28.6160, 77.2180]
+                ];
+                const pathLine = L.polyline(escortPath, {
+                    color: '#e94560',
+                    weight: 3,
+                    opacity: 0.7
+                }).addTo(map);
+                waypointMarkers.push(pathLine);
+                bounds = escortPath;
+            } else if (data.mission_type === 'PERIMETER_GUARD') {
+                // Add perimeter circle
+                const circle = L.circle([28.6139, 77.2090], {
+                    radius: 500, // meters
+                    color: '#ffaa00',
+                    fillColor: '#ffaa00',
+                    fillOpacity: 0.1,
+                    weight: 2
+                }).addTo(map);
+                waypointMarkers.push(circle);
+                // Calculate approximate bounds for 500m circle (roughly 0.0045 degrees per 500m)
+                bounds = [
+                    [28.6139 - 0.0045, 77.2090 - 0.0045],
+                    [28.6139 + 0.0045, 77.2090 + 0.0045]
+                ];
+            }
+            
+            // Auto-zoom to fit all waypoints with padding
+            if (bounds.length > 0) {
+                map.fitBounds(bounds, { padding: [80, 80], maxZoom: 15 });
+            }
         });
 
         socket.on('mission_stopped', (data) => {
@@ -762,6 +976,19 @@
             clearInterval(statusInterval);
             document.getElementById('startBtn').style.display = 'block';
             document.getElementById('stopBtn').style.display = 'none';
+            
+            // Clear all map markers and traces
+            Object.values(droneMarkers).forEach(marker => map.removeLayer(marker));
+            Object.values(droneTraces).forEach(trace => map.removeLayer(trace));
+            droneMarkers = {};
+            droneTraces = {};
+            droneStates = {};
+            
+            // Clear waypoint markers and paths
+            waypointMarkers.forEach(marker => map.removeLayer(marker));
+            waypointMarkers = [];
+            
+            updateDronesList();
         });
 
         socket.on('command_requested', (cmd) => {
@@ -825,12 +1052,6 @@
                 const points = droneTraces[droneId].getLatLngs();
                 droneTraces[droneId].setLatLngs(points.slice(-100));
             }
-
-            // Auto-fit bounds
-            if (Object.keys(droneMarkers).length > 0) {
-                const bounds = L.latLngBounds(Object.values(droneMarkers).map(m => m.getLatLng()));
-                map.fitBounds(bounds.pad(0.1));
-            }
         }
 
         // ===== ALTITUDE CHART ===== 
@@ -877,15 +1098,26 @@
                 const batteryClass = drone.battery_pct > 70 ? 'battery-high' : drone.battery_pct > 40 ? 'battery-mid' : 'battery-low';
                 const statusClass = drone.status === 'ACTIVE' ? 'status-active' : 'status-disabled';
                 const leaderBadge = drone.mission_role === 'LEADER' ? '<span class="leader-badge">LEADER</span>' : '';
+                const roleColor = ROLE_COLORS[drone.mission_role] || '#00d4ff';
                 html += `
-                    <div class="drone-item">
+                    <div class="drone-item" style="border-left-color: ${roleColor};">
                         <div>
                             <div class="drone-id">${drone.drone_id}${leaderBadge}</div>
-                            <div class="drone-role">${drone.mission_role}</div>
+                            <div class="drone-role" style="color: ${roleColor};">${drone.mission_role}</div>
                         </div>
-                        <div>
-                            <span class="drone-battery ${batteryClass}">${drone.battery_pct.toFixed(0)}%</span>
-                            <span class="drone-status ${statusClass}">${drone.status}</span>
+                        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                            <div>
+                                <span class="drone-battery ${batteryClass}">${drone.battery_pct.toFixed(0)}%</span>
+                                <span class="drone-status ${statusClass}">${drone.status}</span>
+                            </div>
+                            <div class="drone-actions">
+                                <button class="drone-action-btn" onclick="holdDrone('${drone.drone_id}')">HOLD</button>
+                                <button class="drone-action-btn" onclick="returnDrone('${drone.drone_id}')">RTB</button>
+                                ${drone.status === 'ACTIVE' ? 
+                                    `<button class="drone-action-btn" onclick="disableDrone('${drone.drone_id}')">LAND</button>` :
+                                    `<button class="drone-action-btn" onclick="enableDrone('${drone.drone_id}')">ENABLE</button>`
+                                }
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1000,6 +1232,34 @@
             return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
         }
 
+        function toggleAltitudeChart() {
+            const panel = document.getElementById('altitudePanel');
+            const container = document.getElementById('altitudeChartContainer');
+            const btn = document.getElementById('altitudeToggle');
+            
+            if (container.classList.contains('collapsed')) {
+                container.classList.remove('collapsed');
+                panel.classList.remove('collapsed');
+                btn.textContent = '▼ Collapse';
+                localStorage.setItem('altitudeChartCollapsed', 'false');
+            } else {
+                container.classList.add('collapsed');
+                panel.classList.add('collapsed');
+                btn.textContent = '▶ Expand';
+                localStorage.setItem('altitudeChartCollapsed', 'true');
+            }
+        }
+
+        // Restore altitude chart state on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const isCollapsed = localStorage.getItem('altitudeChartCollapsed') === 'true';
+            if (isCollapsed) {
+                document.getElementById('altitudeChartContainer').classList.add('collapsed');
+                document.getElementById('altitudePanel').classList.add('collapsed');
+                document.getElementById('altitudeToggle').textContent = '▶ Expand';
+            }
+        });
+
         // ===== CONFIGURATION HANDLER =====
         async function applyConfiguration() {
             const mission = document.querySelector('input[name="mission"]:checked')?.value;
@@ -1027,14 +1287,27 @@
 
         // ===== COMMAND HANDLERS =====
         async function sendCommand(command, droneId) {
-            const endpoint = command === 'DISABLE' ? '/api/command/disable' : '/api/command/enable';
+            let endpoint;
+            if (command === 'DISABLE') {
+                endpoint = '/api/command/disable';
+            } else if (command === 'ENABLE') {
+                endpoint = '/api/command/enable';
+            } else if (command === 'HOLD') {
+                endpoint = '/api/command/hold';
+            } else if (command === 'RETURN') {
+                endpoint = '/api/command/return';
+            } else {
+                console.error('Unknown command:', command);
+                return;
+            }
+            
             const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ drone_id: droneId })
             });
             const data = await response.json();
-            console.log('Command sent:', data);
+            console.log('Command sent:', command, droneId, data);
         }
 
         function holdAllDrones() {
@@ -1050,12 +1323,57 @@
         }
 
         function disableAllDrones() {
-            if (confirm('⚠️  EMERGENCY LAND - Disable all drones?')) {
+            if (confirm('⚠️ EMERGENCY LAND - Disable all drones?')) {
                 Object.keys(droneStates).forEach(droneId => {
                     sendCommand('DISABLE', droneId);
                 });
             }
         }
+
+        // ===== PER-DRONE COMMANDS =====
+        function holdDrone(droneId) {
+            sendCommand('HOLD', droneId);
+        }
+
+        function returnDrone(droneId) {
+            sendCommand('RETURN', droneId);
+        }
+
+        function disableDrone(droneId) {
+            if (confirm(`Disable ${droneId}?`)) {
+                sendCommand('DISABLE', droneId);
+            }
+        }
+
+        function enableDrone(droneId) {
+            sendCommand('ENABLE', droneId);
+        }
+
+        // ===== MISSION-SPECIFIC FORMATIONS =====
+        document.querySelectorAll('input[name="mission"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const mission = e.target.value;
+                const formationSelect = document.getElementById('teamType');
+                
+                // Update formations based on mission
+                if (mission === 'PATROL') {
+                    formationSelect.innerHTML = `
+                        <option value="PATROL">Patrol Formation</option>
+                        <option value="SWEEP">Sweep Formation</option>
+                    `;
+                } else if (mission === 'ESCORT') {
+                    formationSelect.innerHTML = `
+                        <option value="ESCORT">Escort Formation</option>
+                        <option value="CONVOY">Convoy Formation</option>
+                    `;
+                } else if (mission === 'PERIMETER_GUARD') {
+                    formationSelect.innerHTML = `
+                        <option value="PERIMETER">Perimeter Formation</option>
+                        <option value="RING">Ring Formation</option>
+                    `;
+                }
+            });
+        });
 
         // ===== INITIALIZATION =====
         document.addEventListener('DOMContentLoaded', () => {
