@@ -69,7 +69,7 @@ def run_mqtt_demo(
     # Initialize fault registry
     print("[Setup] Initializing fault models...")
     registry = FaultModelRegistry()
-    registry.register(RFLossBurstFault)
+    registry.register("RF_LOSS_BURST", RFLossBurstFault)
     print("[Setup] ✅ RF_LOSS_BURST fault registered")
     
     # Create fault instance

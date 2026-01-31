@@ -4,7 +4,7 @@ import time
 import threading
 from typing import Callable, Dict, List, Optional, Any
 import paho.mqtt.client as mqtt
-from poc.src.ports.message_broker import MessageBroker
+from src.ports.message_broker import MessageBroker
 
 
 class MQTTBrokerAdapter(MessageBroker):
@@ -38,7 +38,13 @@ class MQTTBrokerAdapter(MessageBroker):
         self.client_id = client_id
         self.timeout_sec = timeout_sec
         
-        self._client = mqtt.Client(mqtt.CallbackAPIVersion.V1, client_id=client_id)
+        # Try both paho-mqtt v2 and v1 API versions for compatibility
+        try:
+            self._client = mqtt.Client(mqtt.CallbackAPIVersion.V1, client_id=client_id)
+        except AttributeError:
+            # Fallback for older paho-mqtt versions
+            self._client = mqtt.Client(client_id=client_id)
+        
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
         self._client.on_message = self._on_message
@@ -46,6 +52,14 @@ class MQTTBrokerAdapter(MessageBroker):
         self._subscribers: Dict[str, List[Callable]] = {}
         self._connected = False
         self._lock = threading.Lock()
+    
+    def start(self) -> bool:
+        """Start MQTT broker connection. Alias for connect()."""
+        return self.connect()
+    
+    def stop(self) -> None:
+        """Stop MQTT broker connection. Alias for disconnect()."""
+        self.disconnect()
     
     def connect(self) -> bool:
         """Connect to MQTT broker.
