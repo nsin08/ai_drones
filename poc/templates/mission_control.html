@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drone Fleet Mission Control</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <!-- Socket.IO -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            height: 100vh;
+        }
+        
+        .control-panel {
+            background: #16213e;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #0f3460;
+        }
+        
+        .map-container {
+            position: relative;
+        }
+        
+        #map {
+            height: 100%;
+            width: 100%;
+        }
+        
+        h1 {
+            font-size: 22px;
+            margin-bottom: 20px;
+            color: #00d4ff;
+            text-align: center;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+            padding: 15px;
+            background: #0f3460;
+            border-radius: 8px;
+            border-left: 4px solid #00d4ff;
+        }
+        
+        .section h2 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: #00d4ff;
+            text-transform: uppercase;
+        }
+        
+        .leader-status {
+            padding: 12px;
+            background: #1a1a2e;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border: 2px solid #e94560;
+        }
+        
+        .leader-status strong {
+            color: #e94560;
+        }
+        
+        .leader-status .value {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        
+        .drone-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .drone-item {
+            padding: 12px;
+            background: #1a1a2e;
+            border-radius: 6px;
+            border-left: 4px solid #888;
+            transition: all 0.3s;
+        }
+        
+        .drone-item.leader {
+            border-left-color: #e94560;
+            background: linear-gradient(90deg, rgba(233, 69, 96, 0.1) 0%, #1a1a2e 100%);
+        }
+        
+        .drone-item.disabled {
+            opacity: 0.5;
+            background: #333;
+        }
+        
+        .drone-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .drone-name {
+            font-weight: bold;
+            color: #fff;
+        }
+        
+        .drone-role {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 12px;
+            background: #0f3460;
+            color: #00d4ff;
+            text-transform: uppercase;
+        }
+        
+        .drone-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+        
+        .stat {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .stat-label {
+            color: #888;
+        }
+        
+        .stat-value {
+            font-weight: bold;
+        }
+        
+        .battery-high {
+            color: #4ade80;
+        }
+        
+        .battery-medium {
+            color: #fbbf24;
+        }
+        
+        .battery-low {
+            color: #e94560;
+        }
+        
+        .drone-controls {
+            display: flex;
+            gap: 8px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+        
+        .btn-disable {
+            background: #e94560;
+            color: white;
+        }
+        
+        .btn-disable:hover {
+            background: #d63050;
+        }
+        
+        .btn-enable {
+            background: #4ade80;
+            color: #1a1a2e;
+        }
+        
+        .btn-enable:hover {
+            background: #3bc970;
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .leader-history {
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 12px;
+        }
+        
+        .history-item {
+            padding: 8px;
+            background: #1a1a2e;
+            border-radius: 4px;
+            margin-bottom: 6px;
+            border-left: 3px solid #00d4ff;
+        }
+        
+        .history-time {
+            color: #888;
+            font-size: 10px;
+        }
+        
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(22, 33, 62, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            z-index: 1000;
+            border: 2px solid #00d4ff;
+            min-width: 180px;
+        }
+        
+        .legend h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #00d4ff;
+            text-transform: uppercase;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+            font-size: 12px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid white;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .status-connected {
+            background: #4ade80;
+        }
+        
+        .status-disconnected {
+            background: #e94560;
+        }
+        
+        .connection-status {
+            text-align: center;
+            padding: 10px;
+            background: #0f3460;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+        
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: #1a1a2e;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: #0f3460;
+            border-radius: 4px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00d4ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="control-panel">
+            <h1>🚁 Mission Control</h1>
+            
+            <div class="connection-status">
+                <span class="status-indicator" id="connection-indicator"></span>
+                <span id="connection-text">Connecting...</span>
+            </div>
+            
+            <div class="section">
+                <h2>Leader Status</h2>
+                <div class="leader-status">
+                    <div>Current Leader: <span class="value" id="current-leader">--</span></div>
+                    <div style="margin-top: 8px; color: #888; font-size: 12px;">
+                        Battery: <span id="leader-battery">--</span>% | 
+                        Altitude: <span id="leader-altitude">--</span>m
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>Active Drones (<span id="drone-count">0</span>)</h2>
+                <div class="drone-list" id="drone-list">
+                    <!-- Drones will be dynamically populated here -->
+                </div>
+            </div>
+            
+            <div class="section">
+                <h2>Leader Election History</h2>
+                <div class="leader-history" id="leader-history">
+                    <div style="color: #888; font-size: 11px; text-align: center;">No events yet</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="map-container">
+            <div id="map"></div>
+            <div class="legend">
+                <h3>Drone Roles</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e94560;"></div>
+                    <span>LEADER</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4ade80;"></div>
+                    <span>WINGMAN</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #fbbf24;"></div>
+                    <span>POINT_MAN</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #00d4ff;"></div>
+                    <span>GUARD</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #a78bfa;"></div>
+                    <span>SCOUT</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Initialize map centered on Delhi (where drones are flying)
+        const map = L.map('map').setView([28.6139, 77.2090], 13);
+        
+        // Add OpenStreetMap tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+        
+        // Storage for markers and traces
+        const droneMarkers = {};
+        const droneTraces = {};
+        
+        // Role colors
+        const roleColors = {
+            'LEADER': '#e94560',
+            'WINGMAN': '#4ade80',
+            'POINT_MAN': '#fbbf24',
+            'GUARD': '#00d4ff',
+            'SCOUT': '#a78bfa'
+        };
+        
+        // Connect to Socket.IO
+        const socket = io();
+        
+        socket.on('connect', () => {
+            console.log('Connected to mission control server');
+            document.getElementById('connection-indicator').className = 'status-indicator status-connected';
+            document.getElementById('connection-text').textContent = 'Connected';
+        });
+        
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            document.getElementById('connection-indicator').className = 'status-indicator status-disconnected';
+            document.getElementById('connection-text').textContent = 'Disconnected';
+        });
+        
+        // Handle initial state
+        socket.on('initial_state', (data) => {
+            console.log('Received initial state:', data);
+            
+            // Clear existing markers and traces
+            Object.values(droneMarkers).forEach(marker => map.removeLayer(marker));
+            Object.values(droneTraces).forEach(polyline => map.removeLayer(polyline));
+            
+            // Add drones
+            Object.entries(data.drones).forEach(([droneId, drone]) => {
+                updateDroneMarker(droneId, drone);
+            });
+            
+            // Add traces
+            Object.entries(data.traces).forEach(([droneId, trace]) => {
+                if (trace.length > 0) {
+                    updateDroneTrace(droneId, trace, data.drones[droneId]?.mission_role || 'GUARD');
+                }
+            });
+            
+            updateDroneList(data.drones);
+            updateLeaderStatus(data.drones);
+            
+            // Auto-fit map to show all drones
+            const markers = Object.values(droneMarkers);
+            if (markers.length > 0) {
+                const group = L.featureGroup(markers);
+                map.fitBounds(group.getBounds().pad(0.1));
+            }
+        });
+        
+        // Handle telemetry updates
+        socket.on('telemetry_update', (data) => {
+            updateDroneMarker(data.drone_id, data);
+            
+            // Fetch updated traces periodically
+            fetchTraces();
+        });
+        
+        // Handle leader election events
+        socket.on('leader_election', (data) => {
+            console.log('Leader election:', data);
+            addLeaderElectionEvent(data);
+            
+            // Highlight the new leader
+            setTimeout(() => {
+                fetchDrones();
+            }, 500);
+        });
+        
+        // Handle status updates
+        socket.on('status_update', (data) => {
+            console.log('Status update:', data);
+            fetchDrones();
+        });
+        
+        function updateDroneMarker(droneId, drone) {
+            const lat = drone.latitude || drone.lat;
+            const lon = drone.longitude || drone.lon;
+            if (!lat || !lon) {
+                console.warn(`Missing coordinates for ${droneId}:`, drone);
+                return;
+            }
+            const role = drone.mission_role || 'GUARD';
+            const color = roleColors[role] || '#888';
+            
+            if (!droneMarkers[droneId]) {
+                // Create new marker
+                const marker = L.circleMarker([lat, lon], {
+                    radius: 8,
+                    fillColor: color,
+                    color: 'white',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(map);
+                
+                marker.bindPopup(`<b>${droneId}</b><br>Role: ${role}<br>Battery: ${drone.battery_pct}%<br>Alt: ${drone.altitude_m}m`);
+                droneMarkers[droneId] = marker;
+            } else {
+                // Update existing marker
+                droneMarkers[droneId].setLatLng([lat, lon]);
+                droneMarkers[droneId].setStyle({ fillColor: color });
+                droneMarkers[droneId].setPopupContent(`<b>${droneId}</b><br>Role: ${role}<br>Battery: ${drone.battery_pct}%<br>Alt: ${drone.altitude_m}m`);
+            }
+        }
+        
+        function updateDroneTrace(droneId, trace, role) {
+            const color = roleColors[role] || '#888';
+            const latLngs = trace.map(point => [point.lat, point.lon]);
+            
+            if (droneTraces[droneId]) {
+                map.removeLayer(droneTraces[droneId]);
+            }
+            
+            if (latLngs.length > 1) {
+                const polyline = L.polyline(latLngs, {
+                    color: color,
+                    weight: 2,
+                    opacity: 0.6
+                }).addTo(map);
+                
+                droneTraces[droneId] = polyline;
+            }
+        }
+        
+        function updateDroneList(drones) {
+            const droneList = document.getElementById('drone-list');
+            droneList.innerHTML = '';
+            
+            const droneArray = Object.entries(drones).sort(([idA, droneA], [idB, droneB]) => {
+                if (droneA.mission_role === 'LEADER') return -1;
+                if (droneB.mission_role === 'LEADER') return 1;
+                return idA.localeCompare(idB);
+            });
+            
+            document.getElementById('drone-count').textContent = droneArray.length;
+            
+            droneArray.forEach(([droneId, drone]) => {
+                const isLeader = drone.mission_role === 'LEADER';
+                const isDisabled = drone.status === 'DISABLED';
+                
+                const droneItem = document.createElement('div');
+                droneItem.className = `drone-item ${isLeader ? 'leader' : ''} ${isDisabled ? 'disabled' : ''}`;
+                
+                const batteryClass = drone.battery_pct > 70 ? 'battery-high' : 
+                                    drone.battery_pct > 40 ? 'battery-medium' : 'battery-low';
+                
+                droneItem.innerHTML = `
+                    <div class="drone-header">
+                        <span class="drone-name">${droneId}</span>
+                        <span class="drone-role">${drone.mission_role}</span>
+                    </div>
+                    <div class="drone-stats">
+                        <div class="stat">
+                            <span class="stat-label">Battery:</span>
+                            <span class="stat-value ${batteryClass}">${drone.battery_pct.toFixed(1)}%</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Altitude:</span>
+                            <span class="stat-value">${drone.altitude_m.toFixed(1)}m</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">Status:</span>
+                            <span class="stat-value">${drone.status || 'ACTIVE'}</span>
+                        </div>
+                    </div>
+                    <div class="drone-controls">
+                        <button class="btn-disable" onclick="disableDrone('${droneId}')" ${isDisabled ? 'disabled' : ''}>
+                            Disable
+                        </button>
+                        <button class="btn-enable" onclick="enableDrone('${droneId}')" ${!isDisabled ? 'disabled' : ''}>
+                            Enable
+                        </button>
+                    </div>
+                `;
+                
+                droneList.appendChild(droneItem);
+            });
+        }
+        
+        function updateLeaderStatus(drones) {
+            const leader = Object.entries(drones).find(([id, drone]) => drone.mission_role === 'LEADER');
+            
+            if (leader) {
+                const [leaderId, leaderData] = leader;
+                document.getElementById('current-leader').textContent = leaderId;
+                document.getElementById('leader-battery').textContent = leaderData.battery_pct.toFixed(1);
+                document.getElementById('leader-altitude').textContent = leaderData.altitude_m.toFixed(1);
+            } else {
+                document.getElementById('current-leader').textContent = '--';
+                document.getElementById('leader-battery').textContent = '--';
+                document.getElementById('leader-altitude').textContent = '--';
+            }
+        }
+        
+        function addLeaderElectionEvent(event) {
+            const history = document.getElementById('leader-history');
+            
+            if (history.children.length === 1 && history.children[0].textContent.includes('No events')) {
+                history.innerHTML = '';
+            }
+            
+            const historyItem = document.createElement('div');
+            historyItem.className = 'history-item';
+            
+            const time = new Date(event.timestamp).toLocaleTimeString();
+            historyItem.innerHTML = `
+                <div><strong>${event.old_leader || 'None'}</strong> → <strong style="color: #e94560;">${event.new_leader}</strong></div>
+                <div class="history-time">${time} | Reason: ${event.reason || 'Unknown'}</div>
+            `;
+            
+            history.insertBefore(historyItem, history.firstChild);
+            
+            // Keep only last 10 events
+            while (history.children.length > 10) {
+                history.removeChild(history.lastChild);
+            }
+        }
+        
+        function disableDrone(droneId) {
+            fetch('/api/command/disable', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ drone_id: droneId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                console.log('Disable command sent:', data);
+            })
+            .catch(err => console.error('Error:', err));
+        }
+        
+        function enableDrone(droneId) {
+            fetch('/api/command/enable', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ drone_id: droneId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                console.log('Enable command sent:', data);
+            })
+            .catch(err => console.error('Error:', err));
+        }
+        
+        function fetchDrones() {
+            fetch('/api/drones')
+                .then(res => res.json())
+                .then(data => {
+                    const drones = data.drones || data;
+                    updateDroneList(drones);
+                    updateLeaderStatus(drones);
+                    
+                    // Update markers
+                    Object.entries(drones).forEach(([droneId, drone]) => {
+                        updateDroneMarker(droneId, drone);
+                    });
+                })
+                .catch(err => console.error('Error fetching drones:', err));
+        }
+        
+        function fetchTraces() {
+            fetch('/api/traces')
+                .then(res => res.json())
+                .then(data => {
+                    // Fetch current drones to get roles
+                    fetch('/api/drones')
+                        .then(res => res.json())
+                        .then(response => {
+                            const drones = response.drones || response;
+                            Object.entries(data).forEach(([droneId, trace]) => {
+                                const role = drones[droneId]?.mission_role || 'GUARD';
+                                updateDroneTrace(droneId, trace, role);
+                            });
+                        });
+                })
+                .catch(err => console.error('Error fetching traces:', err));
+        }
+        
+        // Periodically update traces and drone list
+        setInterval(fetchTraces, 5000);
+        setInterval(fetchDrones, 3000);
+        
+        // Initial fetch
+        setTimeout(() => {
+            fetchDrones();
+            fetchTraces();
+        }, 1000);
+    </script>
+</body>
+</html>
