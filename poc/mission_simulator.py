@@ -59,6 +59,7 @@ class MissionSimulator:
             drone_id = msg.topic.split('/')[1]
             command_data = json.loads(msg.payload.decode())
             command = command_data.get('command')
+            cmd_id = command_data.get('cmd_id')
             
             # Find the drone in current mission
             drone = next((d for d in self.current_drones if d.drone_id == drone_id), None)
@@ -74,12 +75,18 @@ class MissionSimulator:
                 
                 if was_leader:
                     self._elect_new_leader(drone.mission_type)
+                
+                # Send acknowledgment
+                self._publish_command_ack(cmd_id, drone_id, command, 'SUCCESS')
                     
             elif command == 'ENABLE':
                 print(f"\n✅ Command received: ENABLE {drone_id}")
                 drone.status = 'ACTIVE'
                 drone.mode = 'AUTO'
                 self._publish_status(drone)
+                
+                # Send acknowledgment
+                self._publish_command_ack(cmd_id, drone_id, command, 'SUCCESS')
                 
         except Exception as e:
             print(f"Error processing command: {e}")
@@ -127,7 +134,18 @@ class MissionSimulator:
         }
         topic = f"fleet/{drone.drone_id}/status"
         self.mqtt_client.publish(topic, json.dumps(payload))
-        self.current_drones = []  # Track active mission drones
+    
+    def _publish_command_ack(self, cmd_id: str, drone_id: str, command: str, result: str):
+        """Publish command acknowledgment to MQTT."""
+        payload = {
+            'cmd_id': cmd_id,
+            'drone_id': drone_id,
+            'command': command,
+            'result': result,
+            'timestamp': time.time()
+        }
+        topic = "fleet/system/command_ack"
+        self.mqtt_client.publish(topic, json.dumps(payload))
         
     def simulate_patrol_mission(self, duration_sec: int = 60):
         """Simulate PATROL mission with 5-drone formation."""

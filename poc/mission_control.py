@@ -16,6 +16,10 @@ import json
 import threading
 from datetime import datetime
 import uuid
+import subprocess
+import time
+import os
+import signal
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'mission-control-secret'
@@ -23,18 +27,19 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Global state
 current_mission = None  # Track active mission (PATROL, ESCORT, PERIMETER_GUARD)
-mission_config = {
-    # "PATROL": {"drone_count": 5, "team_type": "PATROL"},
-    # "ESCORT": {"drone_count": 5, "team_type": "ESCORT"},
-    # "PERIMETER_GUARD": {"drone_count": 5, "team_type": "PERIMETER"},
-}
+mission_config = {}
 drone_states = {}  # Only drones from current mission
 mission_traces = {}  # {drone_id: [(lat, lon, alt, battery, timestamp), ...]}
 altitude_history = {}  # {drone_id: [(timestamp, altitude_m), ...]}
 active_drones = set()
 leader_history = []  # Track leader changes
-command_status = {}  # {cmd_id: {"drone_id": "...", "command": "...", "status": "REQUESTED|ACK|FAILED", "timestamp": ...}}
-pending_commands = {}  # {cmd_id: command_data}  Commands awaiting acknowledgment
+command_status = {}  # {cmd_id: {"drone_id": "...", "command": "...", "status": "REQUESTED|ACK|FAILED"}}
+pending_commands = {}  # {cmd_id: command_data} Commands awaiting acknowledgment
+
+# Mission subprocess management
+simulator_process = None  # subprocess.Popen handle
+mission_start_time = None
+mission_duration = None
 
 # MQTT client
 mqtt_client = mqtt.Client()
@@ -45,6 +50,7 @@ def on_mqtt_connect(client, userdata, flags, rc):
     client.subscribe("fleet/+/telemetry")
     client.subscribe("fleet/+/leader_election")
     client.subscribe("fleet/+/status")
+    client.subscribe("fleet/system/command_ack")
 
 def on_mqtt_message(client, userdata, msg):
     """Handle incoming MQTT messages and broadcast to WebSocket clients."""
@@ -118,6 +124,8 @@ def on_mqtt_message(client, userdata, msg):
                 command_status[cmd_id]["result"] = payload.get("result", "SUCCESS")
                 command_status[cmd_id]["ack_timestamp"] = payload.get("timestamp", datetime.now().isoformat())
                 socketio.emit('command_ack', command_status[cmd_id])
+                # Auto-remove after 10 seconds
+                socketio.emit('command_auto_remove', {'cmd_id': cmd_id, 'delay': 10})
     
     except Exception as e:
         print(f"❌ Error processing MQTT message: {e}")
@@ -191,6 +199,122 @@ def select_mission():
         "status": "success",
         "message": f"Mission switched to {mission_type} with {drone_count} drones",
         "current_mission": current_mission
+    })
+
+@app.route('/api/start-mission', methods=['POST'])
+def start_mission():
+    """Start simulator subprocess with specified mission parameters."""
+    global simulator_process, mission_start_time, mission_duration, current_mission, drone_states, mission_traces, altitude_history
+    
+    data = request.json
+    mission_type = data.get('mission_type')
+    drone_count = data.get('drone_count', 5)
+    duration = data.get('duration', 300)
+    team_type = data.get('team_type', mission_type)
+    
+    if mission_type not in ["PATROL", "ESCORT", "PERIMETER_GUARD"]:
+        return jsonify({"error": "Invalid mission type"}), 400
+    
+    if not (60 <= duration <= 600):
+        return jsonify({"error": "Duration must be 60-600 seconds"}), 400
+    
+    # Kill existing simulator if running
+    if simulator_process and simulator_process.poll() is None:
+        try:
+            os.kill(simulator_process.pid, signal.SIGTERM)
+            simulator_process.wait(timeout=2)
+        except:
+            pass
+    
+    # Clear state
+    drone_states = {}
+    mission_traces = {}
+    altitude_history = {}
+    active_drones.clear()
+    
+    # Set mission config
+    current_mission = mission_type
+    mission_config[mission_type] = {
+        "drone_count": drone_count,
+        "team_type": team_type
+    }
+    mission_start_time = datetime.now()
+    mission_duration = duration
+    
+    # Launch simulator subprocess
+    try:
+        simulator_process = subprocess.Popen([
+            'python', 'mission_simulator.py',
+            '--mission', mission_type.lower(),
+            '--duration', str(duration),
+            '--broker', 'localhost',
+            '--port', '1883'
+        ], cwd='d:\\wsl_shared\\projects\\ai_drones\\poc')
+        
+        print(f"✅ Simulator started: {mission_type} for {duration}s (PID: {simulator_process.pid})")
+        
+        # Broadcast mission start
+        socketio.emit('mission_started', {
+            "mission_type": mission_type,
+            "drone_count": drone_count,
+            "duration": duration,
+            "start_time": mission_start_time.isoformat()
+        })
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Mission {mission_type} started for {duration}s",
+            "pid": simulator_process.pid
+        })
+    
+    except Exception as e:
+        print(f"❌ Error starting simulator: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/stop-mission', methods=['POST'])
+def stop_mission():
+    """Stop running simulator subprocess."""
+    global simulator_process, current_mission, mission_start_time
+    
+    if not simulator_process or simulator_process.poll() is not None:
+        return jsonify({"error": "No mission running"}), 400
+    
+    try:
+        os.kill(simulator_process.pid, signal.SIGTERM)
+        simulator_process.wait(timeout=2)
+        print(f"✅ Simulator stopped (PID: {simulator_process.pid})")
+        
+        socketio.emit('mission_stopped', {
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        return jsonify({"status": "success", "message": "Mission stopped"})
+    
+    except Exception as e:
+        print(f"❌ Error stopping simulator: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/mission-status')
+def get_mission_status():
+    """Get current mission status including elapsed time and progress."""
+    status = "STOPPED"
+    elapsed = 0
+    progress = 0
+    
+    if simulator_process and simulator_process.poll() is None:
+        status = "RUNNING"
+        if mission_start_time and mission_duration:
+            elapsed = int((datetime.now() - mission_start_time).total_seconds())
+            progress = min(100, int((elapsed / mission_duration) * 100))
+    
+    return jsonify({
+        "status": status,
+        "current_mission": current_mission,
+        "mission_config": mission_config,
+        "elapsed_seconds": elapsed,
+        "total_duration": mission_duration or 0,
+        "progress_percent": progress,
+        "active_drone_count": len(drone_states)
     })
 
 @app.route('/api/configure-drones', methods=['POST'])

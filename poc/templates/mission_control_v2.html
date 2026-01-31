@@ -555,7 +555,7 @@
 
             <!-- Drone Configuration -->
             <div class="panel-section">
-                <h3>⚙️ Configure Team</h3>
+                <h3>⚙️ Configure & Launch</h3>
                 <div class="control-group">
                     <label for="droneCount">Drone Count (1-10)</label>
                     <input type="number" id="droneCount" min="1" max="10" value="5">
@@ -568,8 +568,23 @@
                         <option value="PERIMETER">Perimeter Formation</option>
                     </select>
                 </div>
+                <div class="control-group">
+                    <label for="missionDuration">Duration (60-600s)</label>
+                    <input type="number" id="missionDuration" min="60" max="600" value="300" step="30">
+                </div>
                 <div class="button-group">
-                    <button class="primary" onclick="applyConfiguration()">Apply Config</button>
+                    <button class="primary" onclick="startMission()" id="startBtn">🚀 START MISSION</button>
+                    <button onclick="stopMission()" id="stopBtn" style="display: none; background: #aa0000; border-color: #ff0000; color: #fff;">⏹️ STOP</button>
+                </div>
+                <div id="missionStatus" style="margin-top: 12px; padding: 10px; background: #0f3460; border-radius: 6px; display: none;">
+                    <div style="font-size: 11px; color: #aaa;">Mission Status</div>
+                    <div style="font-size: 14px; color: #00d4ff; font-weight: bold; margin: 6px 0;" id="statusText">READY</div>
+                    <div style="font-size: 10px; color: #aaa;">
+                        <span id="elapsedTime">00:00</span> / <span id="totalTime">05:00</span>
+                    </div>
+                    <div style="margin-top: 8px; height: 8px; background: #0a1f2e; border-radius: 4px; overflow: hidden;">
+                        <div id="progressBar" style="width: 0%; height: 100%; background: #00d4ff; border-radius: 4px;"></div>
+                    </div>
                 </div>
             </div>
 
@@ -641,12 +656,12 @@
         let commandHistory = {};
 
         const ROLE_COLORS = {
-            'LEADER': '#e94560',
-            'POINT_MAN': '#ffaa00',
-            'WINGMAN': '#00aa00',
-            'SCOUT': '#9933ff',
-            'GUARD': '#00d4ff',
-            'RELAY': '#00ccff'
+            'LEADER': '#FFD700',      // Gold - premium authority
+            'POINT_MAN': '#FF4444',   // Bright red - forward/aggressive
+            'WINGMAN': '#4ECDC4',     // Teal - support wing
+            'SCOUT': '#95E1D3',       // Mint - speed/explore
+            'GUARD': '#C06C84',       // Mauve - protection
+            'RELAY': '#6C5B7B'        // Purple - communication
         };
 
         // ===== INITIALIZE MAP =====
@@ -714,6 +729,11 @@
             console.log('Mission changed:', data);
             currentMission = data.mission_type;
             document.getElementById('headerMission').textContent = data.mission_type;
+            document.getElementById('headerLeader').textContent = '---';  // Reset leader
+            document.getElementById('leaderInfo').innerHTML = `
+                <strong>Current Leader:</strong>
+                <div class="leader-name">---</div>
+            `;
             droneStates = {};
             droneMarkers = {};
             droneTraces = {};
@@ -724,6 +744,24 @@
             });
             altitudeChart.data.datasets = [];
             altitudeChart.update();
+        });
+
+        socket.on('mission_started', (data) => {
+            console.log('Mission started:', data);
+            currentMission = data.mission_type;
+            document.getElementById('headerMission').textContent = data.mission_type;
+            document.getElementById('startBtn').style.display = 'none';
+            document.getElementById('stopBtn').style.display = 'block';
+            document.getElementById('missionStatus').style.display = 'block';
+            updateMissionStatus();
+            statusInterval = setInterval(updateMissionStatus, 1000);
+        });
+
+        socket.on('mission_stopped', (data) => {
+            console.log('Mission stopped');
+            clearInterval(statusInterval);
+            document.getElementById('startBtn').style.display = 'block';
+            document.getElementById('stopBtn').style.display = 'none';
         });
 
         socket.on('command_requested', (cmd) => {
@@ -738,6 +776,16 @@
                 commandHistory[cmd.cmd_id].status = 'ACK';
             }
             updateCommandQueue();
+        });
+
+        socket.on('command_auto_remove', (data) => {
+            // Auto-remove command from queue after delay
+            const cmd_id = data.cmd_id;
+            const delay = (data.delay || 10) * 1000;
+            setTimeout(() => {
+                delete commandHistory[cmd_id];
+                updateCommandQueue();
+            }, delay);
         });
 
         // ===== DRONE MARKER MANAGEMENT =====
@@ -880,6 +928,76 @@
                 `;
             });
             queue.innerHTML = html;
+        }
+
+        // ===== MISSION LAUNCHER =====
+        let statusInterval = null;
+
+        async function startMission() {
+            const mission = document.querySelector('input[name="mission"]:checked')?.value;
+            const droneCount = parseInt(document.getElementById('droneCount').value);
+            const teamType = document.getElementById('teamType').value;
+            const duration = parseInt(document.getElementById('missionDuration').value);
+
+            if (!mission) {
+                alert('Please select a mission first');
+                return;
+            }
+
+            const response = await fetch('/api/start-mission', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mission_type: mission,
+                    drone_count: droneCount,
+                    team_type: teamType,
+                    duration: duration
+                })
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                console.log('Mission started:', data);
+                document.getElementById('totalTime').textContent = formatTime(duration);
+            } else {
+                alert('Error starting mission: ' + data.error);
+            }
+        }
+
+        async function stopMission() {
+            if (!confirm('Stop the running mission?')) return;
+
+            const response = await fetch('/api/stop-mission', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+
+            const data = await response.json();
+            if (response.ok) {
+                console.log('Mission stopped:', data);
+            } else {
+                alert('Error stopping mission: ' + data.error);
+            }
+        }
+
+        async function updateMissionStatus() {
+            const response = await fetch('/api/mission-status');
+            const data = await response.json();
+
+            if (data.status === 'RUNNING') {
+                document.getElementById('statusText').textContent = `RUNNING - ${data.active_drone_count} drones`;
+                document.getElementById('elapsedTime').textContent = formatTime(data.elapsed_seconds);
+                document.getElementById('progressBar').style.width = data.progress_percent + '%';
+            } else {
+                document.getElementById('statusText').textContent = 'STOPPED';
+                clearInterval(statusInterval);
+            }
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
         }
 
         // ===== CONFIGURATION HANDLER =====
