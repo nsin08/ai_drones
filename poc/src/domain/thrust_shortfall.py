@@ -55,7 +55,7 @@ class ThrustShortfallFault(FaultModel):
         # Check if enough time has passed to trigger fault
         time_since_last = now - self._last_fault[drone_id]
         if time_since_last >= self.every_sec:
-            # Only reset fault_start if starting a NEW fault (not currently in one)
+            # Only reset fault_start if this is a NEW cycle (fault was inactive)
             if (now - self._last_fault[drone_id]) >= self.duration_sec:
                 self._fault_start[drone_id] = now
             self._last_fault[drone_id] = now
