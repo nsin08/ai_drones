@@ -1,0 +1,509 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": true,
+  "panels": [
+    {
+      "datasource": "InfluxDB-Telemetry",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.2.3",
+      "targets": [
+        {
+          "datasource": "InfluxDB-Telemetry",
+          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -5m)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"_field\"] == \"battery_pct\")\\n  |> aggregateWindow(every: 1s, fn: last, createEmpty: false)\\n  |> yield(name: \"battery\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Battery Levels by Drone",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "InfluxDB-Telemetry",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "green",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "pluginVersion": "10.2.3",
+      "targets": [
+        {
+          "datasource": "InfluxDB-Telemetry",
+          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -10s)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"_field\"] == \"battery_pct\")\\n  |> last()\\n  |> group(columns: [\"drone_id\"])",
+          "refId": "A"
+        }
+      ],
+      "title": "Current Battery Gauges",
+      "type": "gauge"
+    },
+    {
+      "datasource": "InfluxDB-Telemetry",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "lengtm"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": ["lastNotNull"],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.2.3",
+      "targets": [
+        {
+          "datasource": "InfluxDB-Telemetry",
+          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -5m)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"_field\"] == \"altitude_m\")\\n  |> aggregateWindow(every: 1s, fn: last, createEmpty: false)\\n  |> yield(name: \"altitude\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Altitude by Drone",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "InfluxDB-Telemetry",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": ["value"]
+        },
+        "pieType": "donut",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.2.3",
+      "targets": [
+        {
+          "datasource": "InfluxDB-Telemetry",
+          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -10s)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"mission_type\"] != \"\")\\n  |> group(columns: [\"mission_type\"])\\n  |> count()\\n  |> group()",
+          "refId": "A"
+        }
+      ],
+      "title": "Active Missions by Type",
+      "type": "piechart"
+    },
+    {
+      "datasource": "InfluxDB-Telemetry",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "battery_pct"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 20
+                    },
+                    {
+                      "color": "green",
+                      "value": 50
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 5,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": ["sum"],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "10.2.3",
+      "targets": [
+        {
+          "datasource": "InfluxDB-Telemetry",
+          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -10s)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"_field\"] == \"battery_pct\" or r[\"_field\"] == \"altitude_m\" or r[\"_field\"] == \"lat\" or r[\"_field\"] == \"lon\")\\n  |> last()\\n  |> pivot(rowKey:[\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\\n  |> keep(columns: [\"drone_id\", \"mission_type\", \"mission_role\", \"mode\", \"battery_pct\", \"altitude_m\", \"lat\", \"lon\"])",
+          "refId": "A"
+        }
+      ],
+      "title": "Fleet Status Table",
+      "transformations": [],
+      "type": "table"
+    },
+    {
+      "datasource": "InfluxDB-Telemetry",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "tooltip": false,
+              "viz": false,
+              "legend": false
+            }
+          },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": ["value"]
+        },
+        "pieType": "pie",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "10.2.3",
+      "targets": [
+        {
+          "datasource": "InfluxDB-Telemetry",
+          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -10s)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"mission_role\"] != \"\")\\n  |> group(columns: [\"mission_role\"])\\n  |> count()\\n  |> group()",
+          "refId": "A"
+        }
+      ],
+      "title": "Drones by Mission Role",
+      "type": "piechart"
+    },
+    {
+      "datasource": "InfluxDB-Telemetry",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "CRITICAL"
+                },
+                "1": {
+                  "color": "yellow",
+                  "index": 1,
+                  "text": "WARNING"
+                },
+                "2": {
+                  "color": "green",
+                  "index": 2,
+                  "text": "NORMAL"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "textMode": "auto"
+      },
+      "pluginVersion": "10.2.3",
+      "targets": [
+        {
+          "datasource": "InfluxDB-Telemetry",
+          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -5m)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"_field\"] == \"fault_count\")\\n  |> aggregateWindow(every: 10s, fn: sum, createEmpty: false)\\n  |> yield(name: \"faults\")",
+          "refId": "A"
+        }
+      ],
+      "title": "Active Faults Count",
+      "type": "stat"
+    }
+  ],
+  "refresh": "1s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["drone", "fleet", "missions"],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Drone Fleet Mission Dashboard",
+  "uid": "drone-fleet-missions",
+  "version": 1,
+  "weekStart": ""
+}
