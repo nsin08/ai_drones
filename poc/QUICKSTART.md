@@ -29,40 +29,93 @@ tests/unit/test_telemetry.py::TestTelemetry::test_create_valid_telemetry PASSED
 
 ## 3. Run Demo
 
+### Option A: Watch all 5 fault models in action (recommended)
+
+```powershell
+python demo.py --faults all --messages 40
+```
+
+**Watch for:**
+- **RF_LOSS_BURST**: Messages dropped (❌ DROPPED)
+- **GNSS_MULTIPATH**: Position offsets (lat/lon changes)
+- **EKF_UNHEALTHY**: Position noise (altitude/position jitter)
+- **THRUST_SHORTFALL**: Altitude loss (alt_m decreases)
+- **BATTERY_SAG**: Battery drain (battery_pct drops faster)
+
+### Option B: Watch specific faults
+
+```powershell
+# Just GPS issues
+python demo.py --faults gnss --messages 30
+
+# Just battery problems
+python demo.py --faults battery --messages 30
+
+# Just RF dropouts
+python demo.py --faults rf --messages 20
+```
+
+### Option C: Original simple demo
+
 ```powershell
 python demo.py --broker memory --messages 20
 ```
 
 **Expected output:**
 ```
-[PoC Demo] Initializing fault injection system...
-[PoC Demo] Broker: InMemoryBroker
-[PoC Demo] Registered fault: RF_LOSS_BURST
+[PoC Demo] Registered: RF_LOSS_BURST (every 10s, down 3s)
+[PoC Demo] Registered: GNSS_MULTIPATH (every 15s, lasts 4s, ±8m offset)
+[PoC Demo] Registered: EKF_UNHEALTHY (every 20s, lasts 5s, σ=12m noise)
+[PoC Demo] Registered: THRUST_SHORTFALL (every 25s, lasts 6s, -1.5m/s altitude)
+[PoC Demo] Registered: BATTERY_SAG (every 30s, lasts 8s, -1.2%/s drain)
 
-[PoC Demo] Simulating 20 telemetry messages...
-[PoC Demo] RF Burst: Every 5s, lasts 3s
+[PoC Demo] Simulating 40 telemetry messages (0.5s intervals)...
 
-[00] D001 @ t=0.0s   → ✅ PASSED (battery: 100.0%)
-[01] D001 @ t=0.5s   → ✅ PASSED (battery: 99.8%)
+[00] D001 @ t=0.0s  → ✅ PASSED                                              (bat: 100.0%)
+[01] D001 @ t=0.5s  → ✅ PASSED                                              (bat: 99.9%)
 ...
-[05] D001 @ t=2.5s   → ❌ DROPPED (RF_LOSS_BURST) (battery: 99.0%)
+[12] D001 @ t=6.0s  → ❌ DROPPED     [RF_LOSS_BURST]                         (battery: 98.8%)
+...
+[20] D001 @ t=10.0s → ✅ PASSED      [GNSS_MULTIPATH]                        (bat: 98.0%, alt: 100.0m)
+[21] D001 @ t=10.5s → ✅ PASSED      [GNSS_MULTIPATH]                        (bat: 97.9%, alt: 100.0m)
 ...
 
-[PoC Demo] Summary:
-  Total messages: 20
-  Passed: 14 (70%)
-  Dropped: 6 (30%)
+[PoC Demo] ========== SUMMARY ==========
+  Total messages: 40
+  Passed: 32 (80%)
+  Dropped: 8 (20%)
 
-[PoC Demo] ✅ Fault injection working!
-[PoC Demo] ✅ Hexagonal architecture validated!
+  Fault Activations:
+    BATTERY_SAG: 12 times
+    EKF_UNHEALTHY: 8 times
+    GNSS_MULTIPATH: 10 times
+    RF_LOSS_BURST: 8 times
+    THRUST_SHORTFALL: 9 times
+
+[PoC Demo] ✅ All 5 fault model(s) demonstrated!
 ```
 
 ## What This Proves
 
+✅ **All 5 fault models working** (RF_LOSS_BURST, GNSS_MULTIPATH, EKF_UNHEALTHY, THRUST_SHORTFALL, BATTERY_SAG)  
 ✅ **Domain logic has ZERO external dependencies**  
-✅ **Tests run in <1 second (no MQTT broker needed)**  
+✅ **Tests run in <2 seconds (56 tests, no MQTT broker needed)**  
 ✅ **Easy to swap InMemory ↔ MQTT brokers**  
 ✅ **Fault models are pluggable via registry**  
+
+## Observing Missions Live
+
+The demo shows **simulated telemetry** with faults injected in real-time. Watch for:
+
+| Fault | Observable Effect | Demo Flag |
+|-------|-------------------|-----------|
+| **RF_LOSS_BURST** | Message drops (❌ DROPPED) | `--faults rf` |
+| **GNSS_MULTIPATH** | Position offsets (lat/lon changes) | `--faults gnss` |
+| **EKF_UNHEALTHY** | Position noise (random jitter) | `--faults ekf` |
+| **THRUST_SHORTFALL** | Altitude loss (alt_m decreases) | `--faults thrust` |
+| **BATTERY_SAG** | Battery drain (battery_pct drops) | `--faults battery` |
+
+Run `python demo.py --help` to see all options.  
 
 ## Next Steps
 

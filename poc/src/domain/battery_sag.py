@@ -7,8 +7,8 @@ Simulates battery voltage sag under load causing battery percentage drops.
 import time
 from typing import Dict, List, Optional, Tuple
 
-from poc.src.domain.fault_model import FaultModel
-from poc.src.domain.telemetry import Telemetry
+from .fault_model import FaultModel
+from .telemetry import Telemetry
 
 
 class BatterySagFault(FaultModel):

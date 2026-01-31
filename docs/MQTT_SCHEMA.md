@@ -76,22 +76,6 @@ ai_drones/
 }
 ```
 
-#### Supported Fault Types
-
-| Fault Type | Description | Effect | Default Parameters |
-|------------|-------------|--------|-------------------|
-| **RF_LOSS_BURST** | Radio frequency signal loss | Drops telemetry messages (returns None) | every_sec=180.0, down_sec=8.0 |
-| **GNSS_MULTIPATH** | GPS multipath interference | Applies random lat/lon position offsets | every_sec=60.0, duration_sec=5.0, offset_range=10.0m |
-| **EKF_UNHEALTHY** | Extended Kalman Filter failure | Injects Gaussian noise into position (lat/lon/alt) | every_sec=90.0, duration_sec=8.0, noise_stddev_m=15.0 |
-| **THRUST_SHORTFALL** | Motor/propeller thrust loss | Reduces altitude cumulatively over time | every_sec=120.0, duration_sec=10.0, alt_loss_mps=2.0 |
-| **BATTERY_SAG** | Battery voltage sag under load | Temporarily reduces battery percentage | every_sec=150.0, duration_sec=6.0, sag_pct=15.0 |
-
-**Fault Behavior:**
-- All faults follow a periodic pattern: activate every `every_sec`, remain active for `duration_sec`
-- Per-drone state tracking: each drone experiences faults independently
-- Telemetry modifications apply to current input (not cumulative across calls except THRUST_SHORTFALL)
-- Faults can overlap (multiple faults active simultaneously)
-
 ### Commands
 
 **Topic:** `ai_drones/commands/{drone_id}/{command_type}`

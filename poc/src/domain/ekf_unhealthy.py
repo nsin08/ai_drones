@@ -8,8 +8,8 @@ import random
 import time
 from typing import Dict, List, Optional, Tuple
 
-from poc.src.domain.fault_model import FaultModel
-from poc.src.domain.telemetry import Position, Telemetry
+from .fault_model import FaultModel
+from .telemetry import Position, Telemetry
 
 
 class EKFUnhealthyFault(FaultModel):
