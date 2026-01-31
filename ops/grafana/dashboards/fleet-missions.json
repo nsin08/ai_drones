@@ -23,9 +23,7 @@
       "datasource": "InfluxDB-Telemetry",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": {"mode": "palette-classic"},
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
@@ -35,40 +33,21 @@
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
+            "hideFrom": {"tooltip": false, "viz": false, "legend": false},
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
+            "scaleDistribution": {"type": "linear"},
             "showPoints": "never",
             "spanNulls": true
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
           "unit": "percent"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 0
-      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
       "id": 1,
       "options": {
         "legend": {
@@ -77,16 +56,13 @@
           "placement": "right",
           "showLegend": true
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
+        "tooltip": {"mode": "multi", "sort": "none"}
       },
       "pluginVersion": "10.2.3",
       "targets": [
         {
           "datasource": "InfluxDB-Telemetry",
-          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -5m)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"_field\"] == \"battery_pct\")\\n  |> aggregateWindow(every: 1s, fn: last, createEmpty: false)\\n  |> yield(name: \"battery\")",
+          "query": "from(bucket: \"telemetry\") |> range(start: -5m) |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\") |> filter(fn: (r) => r[\"_field\"] == \"battery_pct\") |> aggregateWindow(every: 1s, fn: last, createEmpty: false)",
           "refId": "A"
         }
       ],
@@ -97,47 +73,27 @@
       "datasource": "InfluxDB-Telemetry",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
+          "color": {"mode": "thresholds"},
           "mappings": [],
           "max": 100,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 20
-              },
-              {
-                "color": "green",
-                "value": 50
-              }
+              {"color": "red", "value": null},
+              {"color": "yellow", "value": 20},
+              {"color": "green", "value": 50}
             ]
           },
           "unit": "percent"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 0
-      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
       "id": 2,
       "options": {
         "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
+        "reduceOptions": {"values": false, "calcs": ["lastNotNull"], "fields": ""},
         "showThresholdLabels": false,
         "showThresholdMarkers": true,
         "text": {}
@@ -146,7 +102,7 @@
       "targets": [
         {
           "datasource": "InfluxDB-Telemetry",
-          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -10s)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"_field\"] == \"battery_pct\")\\n  |> last()\\n  |> group(columns: [\"drone_id\"])",
+          "query": "from(bucket: \"telemetry\") |> range(start: -10s) |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\") |> filter(fn: (r) => r[\"_field\"] == \"battery_pct\") |> last()",
           "refId": "A"
         }
       ],
@@ -157,9 +113,7 @@
       "datasource": "InfluxDB-Telemetry",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": {"mode": "palette-classic"},
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
@@ -169,40 +123,21 @@
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "none",
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            },
+            "hideFrom": {"tooltip": false, "viz": false, "legend": false},
             "lineInterpolation": "linear",
             "lineWidth": 2,
             "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
+            "scaleDistribution": {"type": "linear"},
             "showPoints": "never",
             "spanNulls": true
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "lengtm"
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "m"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
       "id": 3,
       "options": {
         "legend": {
@@ -211,16 +146,13 @@
           "placement": "right",
           "showLegend": true
         },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
+        "tooltip": {"mode": "multi", "sort": "none"}
       },
       "pluginVersion": "10.2.3",
       "targets": [
         {
           "datasource": "InfluxDB-Telemetry",
-          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -5m)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"_field\"] == \"altitude_m\")\\n  |> aggregateWindow(every: 1s, fn: last, createEmpty: false)\\n  |> yield(name: \"altitude\")",
+          "query": "from(bucket: \"telemetry\") |> range(start: -5m) |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\") |> filter(fn: (r) => r[\"_field\"] == \"altitude_m\") |> aggregateWindow(every: 1s, fn: last, createEmpty: false)",
           "refId": "A"
         }
       ],
@@ -231,26 +163,15 @@
       "datasource": "InfluxDB-Telemetry",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": {"mode": "palette-classic"},
           "custom": {
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            }
+            "hideFrom": {"tooltip": false, "viz": false, "legend": false}
           },
           "mappings": []
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 8
-      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
       "id": 4,
       "options": {
         "legend": {
@@ -260,16 +181,13 @@
           "values": ["value"]
         },
         "pieType": "donut",
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "tooltip": {"mode": "single", "sort": "none"}
       },
       "pluginVersion": "10.2.3",
       "targets": [
         {
           "datasource": "InfluxDB-Telemetry",
-          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -10s)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"mission_type\"] != \"\")\\n  |> group(columns: [\"mission_type\"])\\n  |> count()\\n  |> group()",
+          "query": "from(bucket: \"telemetry\") |> range(start: -10s) |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\") |> group(columns: [\"mission_type\"]) |> count()",
           "refId": "A"
         }
       ],
@@ -280,57 +198,28 @@
       "datasource": "InfluxDB-Telemetry",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
+          "color": {"mode": "thresholds"},
           "custom": {
             "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
+            "cellOptions": {"type": "auto"},
             "inspect": false
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
         },
         "overrides": [
           {
-            "matcher": {
-              "id": "byName",
-              "options": "battery_pct"
-            },
+            "matcher": {"id": "byName", "options": "battery_pct"},
             "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-background"
-                }
-              },
+              {"id": "custom.cellOptions", "value": {"type": "color-background"}},
               {
                 "id": "thresholds",
                 "value": {
                   "mode": "absolute",
                   "steps": [
-                    {
-                      "color": "red",
-                      "value": null
-                    },
-                    {
-                      "color": "yellow",
-                      "value": 20
-                    },
-                    {
-                      "color": "green",
-                      "value": 50
-                    }
+                    {"color": "red", "value": null},
+                    {"color": "yellow", "value": 20},
+                    {"color": "green", "value": 50}
                   ]
                 }
               }
@@ -338,21 +227,11 @@
           }
         ]
       },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 16
-      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
       "id": 5,
       "options": {
         "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": ["sum"],
-          "show": false
-        },
+        "footer": {"countRows": false, "fields": "", "reducer": ["sum"], "show": false},
         "showHeader": true,
         "sortBy": []
       },
@@ -360,7 +239,7 @@
       "targets": [
         {
           "datasource": "InfluxDB-Telemetry",
-          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -10s)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"_field\"] == \"battery_pct\" or r[\"_field\"] == \"altitude_m\" or r[\"_field\"] == \"lat\" or r[\"_field\"] == \"lon\")\\n  |> last()\\n  |> pivot(rowKey:[\"_time\"], columnKey: [\"_field\"], valueColumn: \"_value\")\\n  |> keep(columns: [\"drone_id\", \"mission_type\", \"mission_role\", \"mode\", \"battery_pct\", \"altitude_m\", \"lat\", \"lon\"])",
+          "query": "from(bucket: \"telemetry\") |> range(start: -10s) |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\") |> pivot(rowKey:[\"drone_id\"], columnKey: [\"_field\"], valueColumn: \"_value\")",
           "refId": "A"
         }
       ],
@@ -372,26 +251,15 @@
       "datasource": "InfluxDB-Telemetry",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": {"mode": "palette-classic"},
           "custom": {
-            "hideFrom": {
-              "tooltip": false,
-              "viz": false,
-              "legend": false
-            }
+            "hideFrom": {"tooltip": false, "viz": false, "legend": false}
           },
           "mappings": []
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 24
-      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
       "id": 6,
       "options": {
         "legend": {
@@ -401,16 +269,13 @@
           "values": ["value"]
         },
         "pieType": "pie",
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "tooltip": {"mode": "single", "sort": "none"}
       },
       "pluginVersion": "10.2.3",
       "targets": [
         {
           "datasource": "InfluxDB-Telemetry",
-          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -10s)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"mission_role\"] != \"\")\\n  |> group(columns: [\"mission_role\"])\\n  |> count()\\n  |> group()",
+          "query": "from(bucket: \"telemetry\") |> range(start: -10s) |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\") |> group(columns: [\"mission_role\"]) |> count()",
           "refId": "A"
         }
       ],
@@ -421,67 +286,36 @@
       "datasource": "InfluxDB-Telemetry",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
+          "color": {"mode": "thresholds"},
           "mappings": [
             {
               "options": {
-                "0": {
-                  "color": "red",
-                  "index": 0,
-                  "text": "CRITICAL"
-                },
-                "1": {
-                  "color": "yellow",
-                  "index": 1,
-                  "text": "WARNING"
-                },
-                "2": {
-                  "color": "green",
-                  "index": 2,
-                  "text": "NORMAL"
-                }
+                "0": {"color": "green", "index": 0, "text": "OK"},
+                "1": {"color": "yellow", "index": 1, "text": "WARNING"},
+                "2": {"color": "red", "index": 2, "text": "CRITICAL"}
               },
               "type": "value"
             }
           ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 24
-      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
       "id": 7,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
+        "reduceOptions": {"values": false, "calcs": ["sum"], "fields": ""},
         "textMode": "auto"
       },
       "pluginVersion": "10.2.3",
       "targets": [
         {
           "datasource": "InfluxDB-Telemetry",
-          "query": "from(bucket: \"telemetry\")\\n  |> range(start: -5m)\\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\")\\n  |> filter(fn: (r) => r[\"_field\"] == \"fault_count\")\\n  |> aggregateWindow(every: 10s, fn: sum, createEmpty: false)\\n  |> yield(name: \"faults\")",
+          "query": "from(bucket: \"telemetry\") |> range(start: -5m) |> filter(fn: (r) => r[\"_measurement\"] == \"mqtt_consumer\") |> filter(fn: (r) => r[\"_field\"] == \"fault_count\") |> sum()",
           "refId": "A"
         }
       ],
@@ -493,13 +327,8 @@
   "schemaVersion": 38,
   "style": "dark",
   "tags": ["drone", "fleet", "missions"],
-  "templating": {
-    "list": []
-  },
-  "time": {
-    "from": "now-5m",
-    "to": "now"
-  },
+  "templating": {"list": []},
+  "time": {"from": "now-5m", "to": "now"},
   "timepicker": {},
   "timezone": "",
   "title": "Drone Fleet Mission Dashboard",
