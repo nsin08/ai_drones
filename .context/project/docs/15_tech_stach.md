@@ -1,4 +1,8 @@
-Below is a **layered tech stack** for your **ArduPilot + Windows + MQTT + Fleet Ops + AI-assisted ops** idea, with **options per layer** (open-source + “vendor” choices like Mission Planner/QGC/brokers).
+# Layered Tech Stack (Options by Layer)
+
+**Scope:** ArduPilot + Windows + MQTT + Fleet Ops + AI-assisted ops
+
+Below is a **layered tech stack** for this idea, with **options per layer** (open-source + common vendor choices like Mission Planner/QGC/brokers).
 
 ---
 
@@ -137,16 +141,16 @@ This aligns perfectly with your “suggest → human/GCS executes” model.
 
 ---
 
-# Two practical reference stacks
+## 9) Practical reference stacks
 
-## A) MVP demo stack (your current direction)
+### A) MVP demo stack (your current direction)
 
 * ArduPilot + Mission Planner on Windows ([ArduPilot.org][6])
 * MQTT broker: Eclipse Mosquitto ([Eclipse Mosquitto][11])
 * Fleet services: Python (sim + injector + planner + AI)
 * Debug UI: MQTT.Cool Test Client ([MQTT.Cool Test Client][15])
 
-## B) “More real” ops stack (field-ready shape)
+### B) “More real” ops stack (field-ready shape)
 
 * Vehicle: ArduPilot/PX4 + telemetry radio/LTE
 * Edge gateway: MAVLink router + MAVLink→MQTT bridge
@@ -157,18 +161,18 @@ This aligns perfectly with your “suggest → human/GCS executes” model.
 
 If you tell me **your expected scale** (e.g., 5 drones / 50 / 500) and whether you want **cloud-hosted** or **fully local**, I’ll pick the best option per layer and produce a “default stack” + “upgrade path” (MVP → pilot → production).
 
-[1]: https://ardupilot.org/dev/docs/mavlink-basics.html?utm_source=chatgpt.com "MAVLink Basics — Dev documentation"
-[2]: https://px4.io/?utm_source=chatgpt.com "PX4 Autopilot: Open Source Autopilot for Drones"
-[3]: https://mavlink.io/en/?utm_source=chatgpt.com "MAVLink Developer Guide"
-[4]: https://ardupilot.org/mavproxy/?utm_source=chatgpt.com "MAVProxy documentation"
-[5]: https://ardupilot.org/dev/docs/mavlink-routing-in-ardupilot.html?utm_source=chatgpt.com "MAVLink Routing in ArduPilot — Dev documentation"
-[6]: https://ardupilot.org/planner/docs/mission-planner-overview.html?utm_source=chatgpt.com "Mission Planner Overview"
-[7]: https://qgroundcontrol.com/?utm_source=chatgpt.com "QGroundControl – Drone Control – Ground Control Station for ..."
-[8]: https://ardupilot.org/plane/docs/common-GCS.html?utm_source=chatgpt.com "Ground Control Stations — Plane documentation"
-[9]: https://mavsdk.mavlink.io/?utm_source=chatgpt.com "MAVSDK (main / v3) | MAVSDK Guide"
-[10]: https://github.com/mavlink/mavlink?utm_source=chatgpt.com "mavlink/mavlink: Marshalling / communication library for ..."
-[11]: https://mosquitto.org/?utm_source=chatgpt.com "Eclipse Mosquitto"
-[12]: https://www.hivemq.com/products/mqtt-broker/?utm_source=chatgpt.com "HiveMQ MQTT Broker - Enterprise ready to move IoT data"
-[13]: https://www.emqx.com/en?utm_source=chatgpt.com "EMQX: The Unified MQTT Platform for AI and IoT Data ..."
-[14]: https://github.com/dotnet/MQTTnet?utm_source=chatgpt.com "GitHub - dotnet/MQTTnet: MQTTnet is a high performance . ..."
-[15]: https://testclient-cloud.mqtt.cool/?utm_source=chatgpt.com "MQTT.Cool Test Client"
+[1]: https://ardupilot.org/dev/docs/mavlink-basics.html "MAVLink Basics — Dev documentation"
+[2]: https://px4.io/ "PX4 Autopilot: Open Source Autopilot for Drones"
+[3]: https://mavlink.io/en/ "MAVLink Developer Guide"
+[4]: https://ardupilot.org/mavproxy/ "MAVProxy documentation"
+[5]: https://ardupilot.org/dev/docs/mavlink-routing-in-ardupilot.html "MAVLink Routing in ArduPilot — Dev documentation"
+[6]: https://ardupilot.org/planner/docs/mission-planner-overview.html "Mission Planner Overview"
+[7]: https://qgroundcontrol.com/ "QGroundControl – Ground Control Station"
+[8]: https://ardupilot.org/plane/docs/common-GCS.html "Ground Control Stations — Plane documentation"
+[9]: https://mavsdk.mavlink.io/ "MAVSDK Guide"
+[10]: https://github.com/mavlink/mavlink "mavlink/mavlink: communication library"
+[11]: https://mosquitto.org/ "Eclipse Mosquitto"
+[12]: https://www.hivemq.com/products/mqtt-broker/ "HiveMQ MQTT Broker"
+[13]: https://www.emqx.com/en "EMQX: MQTT Platform"
+[14]: https://github.com/dotnet/MQTTnet "dotnet/MQTTnet"
+[15]: https://testclient-cloud.mqtt.cool/ "MQTT.Cool Test Client"
