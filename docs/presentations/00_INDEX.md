@@ -1,8 +1,23 @@
 ﻿# Presentation Suite - Complete Index
 
-**Date:** February 2026  
-**Project:** AI-Enabled Drone Fleet Operations  
+**Date:** February 2026
+**Project:** AI-Enabled Drone Fleet Operations
 **Total Content:** 8 documents (including this index), ~27,700 words, ~275KB (Markdown only)
+
+
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** (none) • **Next:** [01_EXECUTIVE_SUMMARY.md](01_EXECUTIVE_SUMMARY.md)
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Document Guide](#document-guide)
+- [Reading Paths by Audience](#reading-paths-by-audience)
+- [Document Statistics](#document-statistics)
+- [Quick Reference: Key Metrics & Figures](#quick-reference-key-metrics-figures)
+- [Using These Documents](#using-these-documents)
+- [Next Steps](#next-steps)
+- [Version Control](#version-control)
+- [Feedback & Suggestions](#feedback-suggestions)
 
 ---
 
@@ -21,8 +36,8 @@ This presentation suite provides comprehensive coverage of the AI-enabled drone 
 
 ### 1. 01_EXECUTIVE_SUMMARY.md ⭐ START HERE FOR LEADERSHIP
 
-**Audience**: Investors, C-suite executives, board members  
-**Length**: ~1,750 words, ~7-10 minutes read  
+**Audience**: Investors, C-suite executives, board members
+**Length**: ~1,750 words, ~7-10 minutes read
 **Key Sections**:
 - Vision statement & market opportunity ($44B TAM)
 - Business value (6-12x improvement metrics)
@@ -37,8 +52,8 @@ This presentation suite provides comprehensive coverage of the AI-enabled drone 
 
 ### 2. 02_TECHNICAL_OVERVIEW.md ⭐ START HERE FOR ENGINEERS
 
-**Audience**: Software engineers, technical architects (non-drone domain experts)  
-**Length**: ~4,700 words, ~15-20 minutes read  
+**Audience**: Software engineers, technical architects (non-drone domain experts)
+**Length**: ~4,700 words, ~15-20 minutes read
 **Key Sections**:
 - Kubernetes analogy for drone orchestration
 - 5-layer architecture (presentation → edge devices)
@@ -55,8 +70,8 @@ This presentation suite provides comprehensive coverage of the AI-enabled drone 
 
 ### 3. 04_TECHNICAL_PAPER.md ⭐ START HERE FOR RESEARCHERS
 
-**Audience**: Research community, PhD students, technical evaluators, academia  
-**Length**: ~5,400 words, ~18-25 minutes read  
+**Audience**: Research community, PhD students, technical evaluators, academia
+**Length**: ~5,400 words, ~18-25 minutes read
 **Key Sections**:
 - Abstract & research contribution
 - System architecture with ASCII diagrams
@@ -75,8 +90,8 @@ This presentation suite provides comprehensive coverage of the AI-enabled drone 
 
 ### 4. 05_AI_INTEGRATION_ROADMAP.md ⭐ CRITICAL FOR IMPLEMENTATION
 
-**Audience**: Product managers, engineering leadership, implementation teams  
-**Length**: ~3,300 words, ~12-18 minutes read  
+**Audience**: Product managers, engineering leadership, implementation teams
+**Length**: ~3,300 words, ~12-18 minutes read
 **Key Sections**:
 - Phase 1: Reactive Intelligence (Current ✅)
   - 7 fault models (battery sag, GNSS multipath, RF loss, EKF, etc.)
@@ -104,8 +119,8 @@ This presentation suite provides comprehensive coverage of the AI-enabled drone 
 
 ### 5. 07_REFERENCES.md 📚 KNOWLEDGE BASE
 
-**Audience**: All technical staff, researchers, architects  
-**Length**: ~1,900 words, ~8-12 minutes read  
+**Audience**: All technical staff, researchers, architects
+**Length**: ~1,900 words, ~8-12 minutes read
 **Key Sections**:
 - Core technology references (ArduPilot, MQTT, InfluxDB)
 - Swarm robotics literature (foundational papers + algorithms)
@@ -125,8 +140,8 @@ This presentation suite provides comprehensive coverage of the AI-enabled drone 
 
 ### 6. 03_VISUAL_ARCHITECTURE_GUIDE.md 🎨 DIAGRAMS & FLOWS
 
-**Audience**: All stakeholders (visual learners)  
-**Length**: ~5,600 words + extensive diagrams, ~20-30 minutes read  
+**Audience**: All stakeholders (visual learners)
+**Length**: ~5,600 words + extensive diagrams, ~20-30 minutes read
 **Key Sections**:
 - Complete system architecture (5 layers with ASCII art)
 - Data flow diagrams:
@@ -144,8 +159,8 @@ This presentation suite provides comprehensive coverage of the AI-enabled drone 
 
 ### 7. 06_DEPLOYMENT_OPERATIONS_RUNBOOKS.md 🚀 PRODUCTION GUIDE
 
-**Audience**: DevOps, operations teams, system administrators  
-**Length**: ~3,250 words, ~12-18 minutes read  
+**Audience**: DevOps, operations teams, system administrators
+**Length**: ~3,250 words, ~12-18 minutes read
 **Key Sections**:
 - Quick start (5-minute local setup)
 - Production deployment architecture (100-drone single-site setup)
@@ -369,8 +384,8 @@ This presentation suite provides comprehensive coverage of the AI-enabled drone 
 
 ---
 
-**Suite Maintainer**: @nsin08  
-**Repository**: https://github.com/nsin08/ai_drones  
+**Suite Maintainer**: @nsin08
+**Repository**: https://github.com/nsin08/ai_drones
 **Last Updated**: February 2026
 
 ---
@@ -385,3 +400,5 @@ Have suggestions for improving these documents?
 - **Additional use case**: Describe audience + recommend reading path
 
 All feedback improves the suite for everyone.
+---
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** (none) • **Next:** [01_EXECUTIVE_SUMMARY.md](01_EXECUTIVE_SUMMARY.md)

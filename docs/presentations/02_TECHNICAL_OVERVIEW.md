@@ -1,10 +1,24 @@
 ﻿# Autonomous Drone Fleet Operations: Technical Overview
 
-**Date:** February 2026  
-**Project:** AI-Enabled Drone Fleet Management System  
+**Date:** February 2026
+**Project:** AI-Enabled Drone Fleet Management System
 **Audience:** Technical Colleagues (Non-Drone Domain)
 
-**Suite Index:** [00_INDEX.md](00_INDEX.md) • **Diagrams:** [03_VISUAL_ARCHITECTURE_GUIDE.md](03_VISUAL_ARCHITECTURE_GUIDE.md)
+
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [01_EXECUTIVE_SUMMARY.md](01_EXECUTIVE_SUMMARY.md) • **Next:** [03_VISUAL_ARCHITECTURE_GUIDE.md](03_VISUAL_ARCHITECTURE_GUIDE.md)
+
+## Table of Contents
+
+- [Introduction](#introduction)
+- [System Architecture](#system-architecture)
+- [Core Components Deep Dive](#core-components-deep-dive)
+- [Swarm Operations](#swarm-operations)
+- [AI Integration Points](#ai-integration-points)
+- [Performance & Scalability](#performance-scalability)
+- [Security Considerations](#security-considerations)
+- [Next Steps for Production](#next-steps-for-production)
+- [References & Further Reading](#references-further-reading)
+- [Appendix: Glossary](#appendix-glossary)
 
 ---
 
@@ -99,7 +113,7 @@ This document provides a technical deep-dive into our drone fleet operations pla
 
 **Hardware**:
 - **Flight Controller**: Pixhawk 4/6, Cube Orange/Black (STM32 ARM Cortex-M7, 216MHz)
-- **Sensors**: 
+- **Sensors**:
   - IMU: Gyroscope + Accelerometer (measures rotation/acceleration)
   - GPS: u-blox M8/M9 (10Hz position updates)
   - Barometer: MS5611 (altitude estimation)
@@ -136,11 +150,11 @@ This document provides a technical deep-dive into our drone fleet operations pla
 - **QoS 0 (At Most Once)**: Fire-and-forget, no ACK
   - Use case: High-frequency telemetry (GPS position updates)
   - Tradeoff: Acceptable to lose 1-2% of messages
-  
+
 - **QoS 1 (At Least Once)**: ACK required, possible duplicates
   - Use case: Command messages (HOLD, RTB, LAND)
   - Tradeoff: Client must handle duplicate delivery
-  
+
 - **QoS 2 (Exactly Once)**: Four-way handshake, guaranteed single delivery
   - Use case: Critical state changes (ARM/DISARM, mission upload)
   - Tradeoff: 2x latency vs QoS 1
@@ -195,7 +209,7 @@ message_size_limit 1048576        # 1MB max (for image thumbnails)
 def handle_telemetry(client, userdata, msg):
     topic = msg.topic  # e.g., "fleet/PATROL-01/telemetry"
     payload = json.loads(msg.payload)
-    
+
     # Broadcast to all connected web clients
     socketio.emit('telemetry_update', {
         'drone_id': extract_id(topic),
@@ -235,8 +249,8 @@ def check_command_timeouts():
 ```python
 # Launch simulator as subprocess
 simulator_process = subprocess.Popen(
-    ['python', 'mission_simulator.py', 
-     '--mission', 'PATROL', 
+    ['python', 'mission_simulator.py',
+     '--mission', 'PATROL',
      '--drones', '5',
      '--duration', '300'],
     stdout=subprocess.PIPE,
@@ -373,15 +387,15 @@ from(bucket: "telemetry")
     { "type": "stat", "title": "Active Drones", "field": "count(drone_id)" },
     { "type": "stat", "title": "Avg Battery", "field": "mean(battery_pct)" },
     { "type": "stat", "title": "Total Faults", "field": "sum(fault_count)" },
-    
+
     // Row 2: Distribution
     { "type": "piechart", "title": "Mission Types", "field": "mission_type" },
     { "type": "piechart", "title": "Role Distribution", "field": "mission_role" },
-    
+
     // Row 3: Timeseries
     { "type": "timeseries", "title": "Battery Trend", "field": "battery_pct", "legend": "table" },
     { "type": "timeseries", "title": "Altitude Profile", "field": "alt", "legend": "table" },
-    
+
     // Row 4: Status Table
     { "type": "table", "fields": ["drone_id", "battery_pct", "mode", "fault_count"],
       "overrides": [
@@ -408,7 +422,7 @@ groups:
           severity: warning
         annotations:
           summary: "Drone {{ $labels.drone_id }} low battery ({{ $value }}%)"
-          
+
       - alert: CriticalBattery
         expr: battery_pct < 10
         for: 10s
@@ -536,7 +550,7 @@ for task in available_tasks:
     distance = calculate_distance(my_position, task.position)
     battery_cost = distance / (my_battery_pct / 100)  # Penalize low battery
     workload_cost = len(my_assigned_tasks) * 50  # Penalize overloaded drones
-    
+
     my_bid = distance + battery_cost + workload_cost
     publish_bid(task.id, my_bid, my_drone_id)
 
@@ -607,7 +621,7 @@ Use case: Squad-based operations, hierarchical task decomposition
 
 ```python
 # 4 waypoints in sequence
-waypoints = [(28.6139, 77.2090), (28.6180, 77.2090), 
+waypoints = [(28.6139, 77.2090), (28.6180, 77.2090),
              (28.6180, 77.2140), (28.6139, 77.2140)]
 
 # Formation: Leader in front, others spread in line
@@ -652,7 +666,7 @@ for i in range(num_drones):
     angle = (360 / num_drones) * i
     offset_lat = perimeter_radius * cos(angle) / 111320  # meters to degrees
     offset_lon = perimeter_radius * sin(angle) / (111320 * cos(center_lat))
-    
+
     drone_positions[i] = (center_lat + offset_lat, center_lon + offset_lon)
 ```
 
@@ -695,7 +709,7 @@ class BatterySagFault:
     def detect(self, telemetry):
         if telemetry.battery_pct < telemetry.prev_battery_pct - 5:
             # Sudden 5%+ drop = likely cell failure
-            return Fault(severity='HIGH', 
+            return Fault(severity='HIGH',
                         type='BATTERY_SAG',
                         recommendation='RTB immediately')
 
@@ -818,7 +832,7 @@ class DronePathEnv(gym.Env):
     def step(self, action):
         # Simulate drone moving to action waypoint
         new_position = simulate_movement(self.position, action, self.wind)
-        
+
         reward = -1  # Time penalty
         if collision_detected(new_position, self.obstacles):
             reward = -100
@@ -828,7 +842,7 @@ class DronePathEnv(gym.Env):
             done = True
         else:
             done = False
-        
+
         return new_position, reward, done, {}
 
 # Train agent
@@ -1039,16 +1053,16 @@ def validate_command(cmd, drone_id):
     # Check operator permissions
     if not operator_has_permission(current_user, drone_id):
         raise PermissionError("Operator not authorized for this drone")
-    
+
     # Check command is valid for current state
     drone_state = get_drone_state(drone_id)
     if cmd == 'LAND' and drone_state.mode != 'AUTO':
         raise ValueError("LAND only allowed in AUTO mode")
-    
+
     # Check geofence compliance
     if cmd == 'GOTO' and not within_geofence(cmd.lat, cmd.lon):
         raise ValueError("Target outside authorized geofence")
-    
+
     return True
 ```
 
@@ -1107,21 +1121,23 @@ See [07_REFERENCES.md](07_REFERENCES.md) for:
 
 ## Appendix: Glossary
 
-**ArduPilot**: Open-source autopilot software for drones  
-**MAVLink**: Lightweight messaging protocol for drones (Micro Air Vehicle Link)  
-**MQTT**: Publish-subscribe messaging protocol for IoT  
-**QoS**: Quality of Service (MQTT message delivery guarantee)  
-**EKF**: Extended Kalman Filter (sensor fusion algorithm)  
-**IMU**: Inertial Measurement Unit (gyro + accelerometer)  
-**GPS**: Global Positioning System (satellite navigation)  
-**RTB/RTL**: Return to Base / Return to Launch  
-**BVLOS**: Beyond Visual Line of Sight (drone operations)  
-**Geofence**: Virtual boundary that drones cannot cross  
-**Failsafe**: Automatic safety action when problem detected  
-**Loiter**: Hover in place (GPS-stabilized position hold)  
+**ArduPilot**: Open-source autopilot software for drones
+**MAVLink**: Lightweight messaging protocol for drones (Micro Air Vehicle Link)
+**MQTT**: Publish-subscribe messaging protocol for IoT
+**QoS**: Quality of Service (MQTT message delivery guarantee)
+**EKF**: Extended Kalman Filter (sensor fusion algorithm)
+**IMU**: Inertial Measurement Unit (gyro + accelerometer)
+**GPS**: Global Positioning System (satellite navigation)
+**RTB/RTL**: Return to Base / Return to Launch
+**BVLOS**: Beyond Visual Line of Sight (drone operations)
+**Geofence**: Virtual boundary that drones cannot cross
+**Failsafe**: Automatic safety action when problem detected
+**Loiter**: Hover in place (GPS-stabilized position hold)
 
 ---
 
-*Document maintained by @nsin08*  
-*Last updated: February 2026*  
+*Document maintained by @nsin08*
+*Last updated: February 2026*
 *Repository: https://github.com/nsin08/ai_drones*
+---
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [01_EXECUTIVE_SUMMARY.md](01_EXECUTIVE_SUMMARY.md) • **Next:** [03_VISUAL_ARCHITECTURE_GUIDE.md](03_VISUAL_ARCHITECTURE_GUIDE.md)

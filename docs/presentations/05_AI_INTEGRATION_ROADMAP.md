@@ -1,10 +1,24 @@
 ﻿# AI Integration & Autonomous Flight Roadmap
 
-**Date:** February 2026  
-**Project:** AI-Enabled Drone Fleet Operations  
+**Date:** February 2026
+**Project:** AI-Enabled Drone Fleet Operations
 **Audience:** Technical Teams, Product Leadership
 
-**Suite Index:** [00_INDEX.md](00_INDEX.md) • **Technical paper:** [04_TECHNICAL_PAPER.md](04_TECHNICAL_PAPER.md)
+
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [04_TECHNICAL_PAPER.md](04_TECHNICAL_PAPER.md) • **Next:** [06_DEPLOYMENT_OPERATIONS_RUNBOOKS.md](06_DEPLOYMENT_OPERATIONS_RUNBOOKS.md)
+
+## Table of Contents
+
+- [Executive Overview](#executive-overview)
+- [Phase 1: Reactive Intelligence (Current POC ✅)](#phase-1-reactive-intelligence-current-poc)
+- [Phase 2: Predictive Intelligence (Months 3-9)](#phase-2-predictive-intelligence-months-3-9)
+- [Phase 3: Autonomous Decision-Making (Months 9-18)](#phase-3-autonomous-decision-making-months-9-18)
+- [Phase 4: Strategic Intelligence (Months 18-24)](#phase-4-strategic-intelligence-months-18-24)
+- [AI Model Deployment Strategy](#ai-model-deployment-strategy)
+- [Implementation Checklist](#implementation-checklist)
+- [Success Criteria](#success-criteria)
+- [Risk Mitigation](#risk-mitigation)
+- [Conclusion](#conclusion)
 
 ---
 
@@ -18,8 +32,8 @@ This roadmap details the progression from current **rule-based fault detection**
 
 ## Phase 1: Reactive Intelligence (Current POC ✅)
 
-**Duration**: Months 0-3 (Complete)  
-**Investment**: $150k  
+**Duration**: Months 0-3 (Complete)
+**Investment**: $150k
 **Team**: 3 engineers
 
 ### Capabilities Delivered
@@ -38,7 +52,7 @@ def detect_battery_sag(telemetry_stream):
     """
     recent_voltage = telemetry_stream[-10:]
     drop_rate = (recent_voltage[0] - recent_voltage[-1]) / 10
-    
+
     if drop_rate > 0.5:  # > 0.5V/sec
         return {
             'fault': 'BATTERY_SAG',
@@ -96,9 +110,9 @@ Web UI → Flask Backend → MQTT → Drones
 
 ## Phase 2: Predictive Intelligence (Months 3-9)
 
-**Duration**: 6 months  
-**Investment**: $450k  
-**Team**: 5 engineers + 1 ML specialist  
+**Duration**: 6 months
+**Investment**: $450k
+**Team**: 5 engineers + 1 ML specialist
 **Deliverables**: AI models, edge deployment, hardware integration
 
 ### 2.1 Anomaly Detection (Autoencoder)
@@ -128,7 +142,7 @@ model = Sequential([
 
 # Training objective: Minimize reconstruction error on NORMAL data
 loss = MeanSquaredError()
-model.fit(normal_telemetry, normal_telemetry, 
+model.fit(normal_telemetry, normal_telemetry,
          epochs=50, batch_size=32, validation_split=0.2)
 
 # Inference: High reconstruction error = anomaly
@@ -139,7 +153,7 @@ def detect_anomalies(telemetry):
     x = normalize_features(telemetry)
     x_hat = model.predict(x, verbose=0)
     error = mse(x, x_hat)
-    
+
     if error > threshold:
         alert_anomaly(telemetry.drone_id, error, confidence=error/threshold)
 ```
@@ -243,23 +257,23 @@ def compute_wind_effect(waypoint_path, wind_speed, wind_direction):
     tailwind_factor = 0.8x battery drain
     """
     total_battery_usage = 0
-    
+
     for i in range(len(waypoint_path) - 1):
         segment = waypoint_path[i:i+2]
         segment_heading = calculate_bearing(segment[0], segment[1])
-        
+
         # Angle between drone direction and wind
         wind_angle = abs(segment_heading - wind_direction)
-        
+
         # Compute headwind component
         headwind = wind_speed * cos(wind_angle)
-        
+
         # Battery usage scales with headwind
         base_usage = compute_segment_battery_usage(segment)
         adjusted_usage = base_usage * (1 + 0.3 * headwind / wind_speed)
-        
+
         total_battery_usage += adjusted_usage
-    
+
     # Check if mission feasible
     if total_battery_usage > drone_battery_capacity:
         return {
@@ -332,9 +346,9 @@ Training complete → Evaluate on test set → Model metrics
 
 ## Phase 3: Autonomous Decision-Making (Months 9-18)
 
-**Duration**: 9 months  
-**Investment**: $600k  
-**Team**: 8 engineers + 1 ML researcher  
+**Duration**: 9 months
+**Investment**: $600k
+**Team**: 8 engineers + 1 ML researcher
 **Deliverables**: RL path planning, swarm coordination, autonomous recovery
 
 ### 3.1 Dynamic Path Planning (RL Agent)
@@ -351,41 +365,41 @@ Training complete → Evaluate on test set → Model metrics
 ```python
 class DronePathEnvV2(gym.Env):
     """
-    State: [lat, lon, alt, goal_lat, goal_lon, 
+    State: [lat, lon, alt, goal_lat, goal_lon,
             wind_speed, wind_dir, obstacle_map, battery_pct]
     Action: [Δlat, Δlon, Δalt] (next waypoint offset)
     Reward: -time + wind_bonus - collision_penalty + goal_bonus
     """
-    
+
     def step(self, action):
         # Execute action
         next_pos = self.position + action * 10
-        
+
         # Reward calculation
         reward = 0
         done = False
-        
+
         # Time penalty (encourages short paths)
         reward -= 1
-        
+
         # Collision penalty
         if self.collides_with_obstacle(next_pos):
             reward -= 100
             done = True
-        
+
         # Wind bonus (exploit tailwinds)
         wind_assistance = self.wind_speed * cos(angle_to_wind)
         reward += 0.1 * wind_assistance
-        
+
         # Goal reached
         if distance(next_pos, self.goal) < 10:
             reward += 1000
             done = True
-        
+
         # Altitude constraint
         if next_pos[2] < 30 or next_pos[2] > 500:
             reward -= 50
-        
+
         return state, reward, done, {}
 ```
 
@@ -401,7 +415,7 @@ env = DronePathEnvV2()
 # Batch size: 256 samples
 # Update frequency: every 4096 steps
 # Learning rate: 3e-4 (Adam optimizer)
-model = PPO('MlpPolicy', env, 
+model = PPO('MlpPolicy', env,
             n_steps=4096, batch_size=256,
             learning_rate=3e-4, n_epochs=10,
             verbose=1, device='cuda')
@@ -427,19 +441,19 @@ def generate_optimized_path(start, goal, wind, obstacles):
     env.set_start_goal(start, goal)
     env.set_wind(wind)
     env.set_obstacles(obstacles)
-    
+
     obs = env.reset()
     path = [start]
     done = False
     steps = 0
     max_steps = 50  # Prevent infinite loops
-    
+
     while not done and steps < max_steps:
         action, _states = model.predict(obs, deterministic=True)
         obs, reward, done, info = env.step(action)
         path.append(env.position)
         steps += 1
-    
+
     return path  # Publish as waypoint sequence
 ```
 
@@ -465,46 +479,46 @@ class SwarmCoordinator:
         self.all_tasks = all_tasks
         self.my_bundle = []
         self.my_bids = {}
-        
+
     def bundling_phase(self):
         """Build initial task bundle"""
         budget = self.battery_budget  # e.g., 300 units
-        
+
         # Sort tasks by priority
-        sorted_tasks = sorted(self.all_tasks, 
-                            key=lambda t: t.priority, 
+        sorted_tasks = sorted(self.all_tasks,
+                            key=lambda t: t.priority,
                             reverse=True)
-        
+
         for task in sorted_tasks:
             if self.cost(task) < budget:
                 self.my_bundle.append(task)
                 self.my_bids[task.id] = self.cost(task)
                 budget -= self.cost(task)
-    
+
     def consensus_phase(self, max_iterations=10):
         """Converge to stable assignment"""
         for iteration in range(max_iterations):
             # Broadcast bids
             self.publish_bids()
-            
+
             # Receive competing bids
             time.sleep(0.1)
             competing_bids = self.receive_bids_from_neighbors()
-            
+
             # Re-evaluate bundle
             changed = False
             for task_id, my_bid in list(self.my_bids.items()):
                 others_bids = competing_bids.get(task_id, [])
-                
+
                 if others_bids and min(others_bids) < my_bid:
                     # Another drone beats my bid
                     self.my_bundle.remove_task(task_id)
                     del self.my_bids[task_id]
                     changed = True
-            
+
             if not changed:
                 break  # Converged
-        
+
         return self.my_bundle
 ```
 
@@ -536,11 +550,11 @@ Total: 25 tasks assigned, max variance 29 units, balanced load
 @telemetry_subscriber
 def monitor_battery_emergency(drone_state):
     """Auto-trigger recovery actions"""
-    
+
     if drone_state.battery_pct < 10:
         # CRITICAL: Auto-RTB without waiting for human
         publish_command(drone_state.drone_id, 'RTB')
-        
+
         # Notify human (async)
         broadcast_alert({
             'type': 'CRITICAL_BATTERY',
@@ -548,12 +562,12 @@ def monitor_battery_emergency(drone_state):
             'battery_pct': drone_state.battery_pct,
             'action': 'AUTO_RTB_INITIATED'
         })
-    
+
     elif drone_state.battery_pct < 15:
         # WARNING: Check if mission can complete
         estimated_return_time = calculate_rtb_time(drone_state)
         estimated_flight_time_remaining = drone_state.battery_pct / 2  # 2%/min
-        
+
         if estimated_flight_time_remaining < estimated_return_time:
             # Cannot make it home, RTB now
             publish_command(drone_state.drone_id, 'RTB')
@@ -566,19 +580,19 @@ If one drone fails during mission, remaining drones re-task:
 ```python
 def handle_drone_failure(failed_drone_id):
     """Consensus algorithm to redistribute tasks"""
-    
+
     # 1. Identify failed drone's tasks
     orphaned_tasks = get_tasks_assigned_to(failed_drone_id)
-    
+
     # 2. Broadcast new tasks to swarm
     publish_to_fleet('tasks/available', orphaned_tasks)
-    
+
     # 3. Run CBBA consensus to re-assign
     # (existing drones bid on new tasks)
-    
+
     # 4. Drones with new assignments update paths
     # (RL agent generates optimized routes)
-    
+
     # Result: Mission continues without human intervention
 ```
 
@@ -586,9 +600,9 @@ def handle_drone_failure(failed_drone_id):
 
 ## Phase 4: Strategic Intelligence (Months 18-24)
 
-**Duration**: 6 months  
-**Investment**: $800k  
-**Team**: 10 engineers + 2 ML researchers  
+**Duration**: 6 months
+**Investment**: $800k
+**Team**: 10 engineers + 2 ML researchers
 **Deliverables**: Multi-fleet coordination, mission design AI, historical learning
 
 ### 4.1 Mission Design Assistant
@@ -628,7 +642,7 @@ def recommend_fleet(mission_spec):
         mission_spec['num_drones'] = num_drones
         features = featurize_mission(mission_spec)
         outcome = model.predict(features)
-        
+
         if outcome['success_probability'] > 0.95:
             return num_drones  # Return minimum viable count
 ```
@@ -662,17 +676,17 @@ Communication:
 ```python
 class SiteCommander:
     """Manages 20 local drones"""
-    
+
     def handle_new_tasks(self, tasks):
         # Run local CBBA consensus among 20 drones
         # Only escalate unassigned tasks to regional coordinator
         pass
-    
+
     def report_status(self):
         # Aggregate: available_drone_count, avg_battery, mission_progress
         # Send to regional coordinator every 10 seconds
         pass
-    
+
     def receive_command(self, command_from_regional):
         # E.g., "increase perimeter coverage by 30%"
         # Translate to local tactical actions
@@ -903,6 +917,8 @@ This AI roadmap provides a systematic path from rule-based detection (current PO
 
 ---
 
-*Document maintained by @nsin08*  
-*Last updated: February 2026*  
+*Document maintained by @nsin08*
+*Last updated: February 2026*
 *Repository: https://github.com/nsin08/ai_drones*
+---
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [04_TECHNICAL_PAPER.md](04_TECHNICAL_PAPER.md) • **Next:** [06_DEPLOYMENT_OPERATIONS_RUNBOOKS.md](06_DEPLOYMENT_OPERATIONS_RUNBOOKS.md)

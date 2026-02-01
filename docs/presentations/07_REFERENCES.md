@@ -1,10 +1,25 @@
 ﻿# References, Resources & Further Reading
 
-**Date:** February 2026  
-**Project:** AI-Enabled Drone Fleet Operations  
+**Date:** February 2026
+**Project:** AI-Enabled Drone Fleet Operations
 **Scope:** Academic papers, industry standards, open-source projects, datasets
 
-**Suite Index:** [00_INDEX.md](00_INDEX.md)
+
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [06_DEPLOYMENT_OPERATIONS_RUNBOOKS.md](06_DEPLOYMENT_OPERATIONS_RUNBOOKS.md) • **Next:** (none)
+
+## Table of Contents
+
+- [1. Core Technology References](#1-core-technology-references)
+- [2. Swarm Robotics Literature](#2-swarm-robotics-literature)
+- [3. Machine Learning for Robotics](#3-machine-learning-for-robotics)
+- [4. Drone & UAV Specific](#4-drone-uav-specific)
+- [5. Data & Benchmarks](#5-data-benchmarks)
+- [6. Tools & Libraries](#6-tools-libraries)
+- [7. Industry Reports & Market Analysis](#7-industry-reports-market-analysis)
+- [8. Glossary & Terminology](#8-glossary-terminology)
+- [9. How to Access Resources](#9-how-to-access-resources)
+- [10. Contributing to This Project](#10-contributing-to-this-project)
+- [Appendix: Quick Links](#appendix-quick-links)
 
 ---
 
@@ -448,8 +463,8 @@
 
 ---
 
-**Document maintained by @nsin08**  
-**Last updated: February 2026**  
+**Document maintained by @nsin08**
+**Last updated: February 2026**
 **Repository**: https://github.com/nsin08/ai_drones
 
 ---
@@ -465,3 +480,5 @@
 | Stable-Baselines3 | https://stable-baselines3.readthedocs.io |
 | PX4 Flight Logs | https://logs.px4.io |
 | Our Repository | https://github.com/nsin08/ai_drones |
+---
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [06_DEPLOYMENT_OPERATIONS_RUNBOOKS.md](06_DEPLOYMENT_OPERATIONS_RUNBOOKS.md) • **Next:** (none)

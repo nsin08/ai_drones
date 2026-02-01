@@ -9,6 +9,7 @@ from src.domain.ekf_unhealthy import EKFUnhealthyFault
 from src.domain.thrust_shortfall import ThrustShortfallFault
 from src.domain.battery_sag import BatterySagFault
 from src.adapters.memory_broker import InMemoryBroker
+from src.adapters.mqtt_broker import MQTTBrokerAdapter
 
 
 def run_demo():
@@ -29,9 +30,11 @@ def run_demo():
     if args.broker == "memory":
         broker = InMemoryBroker()
     else:
-        print("[PoC Demo] ERROR: MQTT broker not implemented in PoC")
-        print("[PoC Demo] Use --broker memory for now")
-        return
+        broker = MQTTBrokerAdapter(broker_host="localhost", broker_port=1883, client_id="poc-demo")
+        if not broker.connect():
+            print("[PoC Demo] ERROR: Failed to connect to MQTT broker at localhost:1883")
+            print("[PoC Demo] Start it with: cd ops && docker compose up -d")
+            return
     
     # Create fault registry and register all fault models
     registry = FaultModelRegistry()
@@ -50,7 +53,7 @@ def run_demo():
     if args.faults in ["all", "ekf"]:
         registry.register("EKF_UNHEALTHY", EKFUnhealthyFault)
         faults_to_apply.append(registry.create("EKF_UNHEALTHY", every_sec=20.0, duration_sec=5.0, noise_stddev_m=12.0))
-        print("[PoC Demo] Registered: EKF_UNHEALTHY (every 20s, lasts 5s, σ=12m noise)")
+        print("[PoC Demo] Registered: EKF_UNHEALTHY (every 20s, lasts 5s, stddev=12m noise)")
     
     if args.faults in ["all", "thrust"]:
         registry.register("THRUST_SHORTFALL", ThrustShortfallFault)
@@ -99,11 +102,11 @@ def run_demo():
         # Display result with details
         if result is None:
             # RF_LOSS_BURST dropped the message
-            status = "❌ DROPPED"
+            status = "DROPPED"
             details = f"battery: {telemetry.battery_pct:.1f}%"
             dropped += 1
         else:
-            status = "✅ PASSED"
+            status = "PASSED"
             # Show what changed
             pos_changed = (result.position.lat != initial_position.lat or 
                           result.position.lon != initial_position.lon or 
@@ -119,7 +122,7 @@ def run_demo():
             passed += 1
         
         fault_str = f" [{', '.join(active_faults)}]" if active_faults else ""
-        print(f"[{i:02d}] {telemetry.drone_id} @ t={i*0.5:.1f}s → {status:12s} {fault_str:40s} ({details})")
+        print(f"[{i:02d}] {telemetry.drone_id} @ t={i*0.5:.1f}s -> {status:12s} {fault_str:40s} ({details})")
         
         # Publish to broker (if not dropped)
         if result is not None:
@@ -143,17 +146,18 @@ def run_demo():
     for fault_code, count in sorted(fault_counts.items()):
         print(f"    {fault_code}: {count} times")
     
-    # Verify broker received messages
-    published = broker.get_published()
-    print(f"\n  Broker published: {len(published)} messages")
-    
-    print(f"\n[PoC Demo] ✅ All {len(faults_to_apply)} fault model(s) demonstrated!")
-    print(f"[PoC Demo] ✅ Hexagonal architecture validated!")
+    # Verify broker received messages (in-memory only)
+    if hasattr(broker, "get_published"):
+        published = broker.get_published()
+        print(f"\n  Broker published: {len(published)} messages")
+
+    print(f"\n[PoC Demo] OK: All {len(faults_to_apply)} fault model(s) demonstrated")
+    print(f"[PoC Demo] OK: Hexagonal architecture validated")
     print(f"\n[PoC Demo] Key achievements:")
-    print("  ✅ Domain logic has ZERO external dependencies")
-    print("  ✅ Tests run without MQTT broker")
-    print("  ✅ Easy to swap InMemory ↔ MQTT broker")
-    print("  ✅ Fault models are pluggable via registry")
+    print("  - Domain logic has zero external dependencies")
+    print("  - Tests run without MQTT broker")
+    print("  - Easy to swap InMemory <-> MQTT broker")
+    print("  - Fault models are pluggable via registry")
     print(f"\n[PoC Demo] Run tests: pytest tests/unit -v (56 tests)")
     print(f"[PoC Demo] Try: python demo.py --faults gnss --messages 30")
 

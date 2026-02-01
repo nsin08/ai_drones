@@ -1,23 +1,22 @@
 ﻿# Deployment, Operations & Runbooks
 
-**Date:** February 2026  
-**Project:** AI-Enabled Drone Fleet Operations  
+**Date:** February 2026
+**Project:** AI-Enabled Drone Fleet Operations
 **Audience:** DevOps, Operations teams, production managers
 
-**Suite Index:** [00_INDEX.md](00_INDEX.md) • **References:** [07_REFERENCES.md](07_REFERENCES.md)
 
----
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [05_AI_INTEGRATION_ROADMAP.md](05_AI_INTEGRATION_ROADMAP.md) • **Next:** [07_REFERENCES.md](07_REFERENCES.md)
 
 ## Table of Contents
 
-1. [Quick Start](#1-quick-start)
-2. [Production Deployment](#2-production-deployment)
-3. [Monitoring & Alerting](#3-monitoring--alerting)
-4. [Operational Runbooks](#4-operational-runbooks)
-5. [Troubleshooting](#5-troubleshooting)
-6. [Disaster Recovery](#6-disaster-recovery)
-7. [Security Hardening](#7-security-hardening)
-8. [Performance Tuning](#8-performance-tuning)
+- [1. Quick Start](#1-quick-start)
+- [2. Production Deployment](#2-production-deployment)
+- [3. Monitoring & Alerting](#3-monitoring-alerting)
+- [4. Operational Runbooks](#4-operational-runbooks)
+- [5. Troubleshooting](#5-troubleshooting)
+- [6. Disaster Recovery](#6-disaster-recovery)
+- [7. Security Hardening](#7-security-hardening)
+- [8. Performance Tuning](#8-performance-tuning)
 
 ---
 
@@ -403,21 +402,21 @@ groups:
       annotations:
         summary: "MQTT broker latency {{ $value }}ms"
         runbook: "docs/runbooks/mqtt-latency.md"
-        
+
     - alert: DroneOffline
       expr: drone_online{drone_id=~".*"} == 0
       for: 5m
       annotations:
         summary: "Drone {{ $labels.drone_id }} offline"
         runbook: "docs/runbooks/drone-offline.md"
-        
+
     - alert: LowBatteryFleet
       expr: avg(drone_battery_pct) < 30
       for: 5m
       annotations:
         summary: "Fleet average battery {{ $value }}%"
         action: "Recommend fleet landing"
-        
+
     - alert: DatabaseWriteErrors
       expr: increase(influxdb_write_errors[5m]) > 10
       for: 2m
@@ -596,7 +595,7 @@ curl -X POST http://mission-control:5000/api/missions/emergency-stop \
 # Logging:
 # Check backend logs for emergency event:
 tail -f /var/log/fleet-ops/backend.log | grep "EMERGENCY"
-# Expected: 
+# Expected:
 #   [2026-02-01 14:32:15] EMERGENCY_STOP initiated
 #   [2026-02-01 14:32:45] PATROL-01 landed (took 30s)
 #   [2026-02-01 14:33:12] PATROL-12 landed (took 57s)
@@ -789,11 +788,11 @@ Solution:
 Daily Backup Schedule:
   02:00 UTC: Full backup (InfluxDB + PostgreSQL + files)
              → Compress → Upload to AWS S3 Glacier
-  
+
   Weekly: Full restore test (every Sunday 03:00 UTC)
           → Verify backup integrity
           → Ensure recovery procedure works
-  
+
   Monthly: Disaster recovery drill
            → Simulate complete data loss
            → Time full recovery
@@ -820,23 +819,23 @@ Zone: DMZ (External-facing)
     - TCP 80 (HTTP redirect to 443)
     - TCP 443 (HTTPS/TLS)
     From: Anywhere (0.0.0.0/0)
-  
+
 Zone: Internal (Backend)
   Ingress:
     - TCP 1883 (MQTT)
     From: Drones only (10.0.1.0/24)
-    
+
     - TCP 5432 (PostgreSQL)
     From: Backend servers only (10.0.2.0/24)
-    
+
     - TCP 8086 (InfluxDB)
     From: Backend servers & Telegraf only (10.0.2.0/24, 10.0.3.0/24)
-  
+
 Zone: Management
   Ingress:
     - TCP 22 (SSH)
     From: VPN/Admin IPs only (whitelist)
-    
+
     - TCP 3000 (Grafana)
     From: VPN only (10.255.0.0/16)
 
@@ -875,12 +874,12 @@ def login():
     """Issue JWT token for API access"""
     username = request.json.get('username')
     password = request.json.get('password')
-    
+
     # Verify against database (bcrypt hashed)
     user = db.session.query(User).filter_by(username=username).first()
     if not user or not verify_password(password, user.password_hash):
         return {"error": "Invalid credentials"}, 401
-    
+
     # Issue token (expires in 1 hour)
     access_token = create_access_token(
         identity=user.id,
@@ -948,6 +947,8 @@ python poc/tests/load/simulate_fleet.py \
 
 ---
 
-**Document maintained by @nsin08**  
-**Last updated: February 2026**  
+**Document maintained by @nsin08**
+**Last updated: February 2026**
 **Repository**: https://github.com/nsin08/ai_drones
+---
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [05_AI_INTEGRATION_ROADMAP.md](05_AI_INTEGRATION_ROADMAP.md) • **Next:** [07_REFERENCES.md](07_REFERENCES.md)

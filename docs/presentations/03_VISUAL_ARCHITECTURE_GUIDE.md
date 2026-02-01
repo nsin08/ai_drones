@@ -1,10 +1,20 @@
 ﻿# Visual Architecture Guide & Diagrams
 
-**Date:** February 2026  
-**Project:** AI-Enabled Drone Fleet Operations  
+**Date:** February 2026
+**Project:** AI-Enabled Drone Fleet Operations
 **Purpose:** Visual reference for system architecture, data flow, and AI integration
 
-**Suite Index:** [00_INDEX.md](00_INDEX.md) • **Technical overview:** [02_TECHNICAL_OVERVIEW.md](02_TECHNICAL_OVERVIEW.md)
+
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [02_TECHNICAL_OVERVIEW.md](02_TECHNICAL_OVERVIEW.md) • **Next:** [04_TECHNICAL_PAPER.md](04_TECHNICAL_PAPER.md)
+
+## Table of Contents
+
+- [1. System Architecture Layers](#1-system-architecture-layers)
+- [2. Data Flow Diagrams](#2-data-flow-diagrams)
+- [3. Swarm Formation Patterns](#3-swarm-formation-patterns)
+- [4. AI Decision Tree](#4-ai-decision-tree)
+- [5. System Scaling Architecture](#5-system-scaling-architecture)
+- [6. Comparison Matrix: Our Solution vs Competitors](#6-comparison-matrix-our-solution-vs-competitors)
 
 ---
 
@@ -373,31 +383,31 @@ Altitude: 120m             Altitude: 118m              Altitude: 125m
                │ fleet/{id}/telemetry          │
                │ QoS 0 (accept loss)           │
                │                               │
-               ▼                               
-        ┌──────────────┐                       
-        │ MQTT Broker  │ (Mosquitto)           
-        │              │                       
-        │ Routes msgs  │ (pub/sub fanout)      
-        │ <10ms        │                       
-        └──────┬───────┘                       
-               │                               
-       ┌───────┼────────┬──────────┐           
-       │       │        │          │           
-       ▼       ▼        ▼          ▼           
-   [Telegraf] [Grafana] [Web UI] [Archive]    
-       │       │        │          │           
-       │       ▼        ▼          │           
-       │    Dashboard   Live       │           
-       │    queries     updates    │           
-       │    Flux QL     ~2Hz       │           
-       │                           │           
-       ▼                           ▼           
+               ▼
+        ┌──────────────┐
+        │ MQTT Broker  │ (Mosquitto)
+        │              │
+        │ Routes msgs  │ (pub/sub fanout)
+        │ <10ms        │
+        └──────┬───────┘
+               │
+       ┌───────┼────────┬──────────┐
+       │       │        │          │
+       ▼       ▼        ▼          ▼
+   [Telegraf] [Grafana] [Web UI] [Archive]
+       │       │        │          │
+       │       ▼        ▼          │
+       │    Dashboard   Live       │
+       │    queries     updates    │
+       │    Flux QL     ~2Hz       │
+       │                           │
+       ▼                           ▼
    InfluxDB                   File Storage
    (Time-series)              (MAVLink.tlog)
-   • Write: 24 pts/sec        
-   • Query: <500ms            
-   • Aggregation: 1d/7d       
-   • Retention: 7d raw        
+   • Write: 24 pts/sec
+   • Query: <500ms
+   • Aggregation: 1d/7d
+   • Retention: 7d raw
 ```
 
 **Key Metrics**:
@@ -694,7 +704,7 @@ Waypoint Coordinates:
   WP4: (28.6139, 77.2140) - Southeast corner
 
 Formation over waypoints:
-  
+
   WP2 ●────────────────────── WP3 ●
       │                          │
       │    LEADER (PATROL-01)    │
@@ -706,7 +716,7 @@ Formation over waypoints:
       │    SCOUT      [empty]    │
       │       ▼                  │
   WP1 ●────────────────────── WP4 ●
-  
+
   Drone | Role    | Offset from Leader
   ───────────────────────────────────
   01    | LEADER  | (0m, 0m)
@@ -764,10 +774,10 @@ Formation geometry (birds-eye view):
     ◆ WINGMAN_L  ■ ASSET  ◆ WINGMAN_R
          │       │        │
          └───────●────────┘
-                 
+
               ▲ REAR
          (behind)
-         
+
   ● TOP (above, 30m altitude)
 
 Distance from asset: 30-50 meters in all directions
@@ -789,7 +799,7 @@ Normal state:        Intrusion detected:
 L─────A─────R            L─A─R  (converge)
       │
      REAR
-     
+
       ↓ (tight envelope around asset)
 ```
 
@@ -896,7 +906,7 @@ Telemetry arrives at companion computer
 └────────────────────┼┼──────────────┘
                      ││
         ┌────────────┘│
-        │             │ 
+        │             │
         ▼             ▼
   ┌────────┐    ┌────────────────┐
   │ Normal │    │ Anomaly Found  │
@@ -1223,6 +1233,8 @@ Market Price           | $0-free      | $300k+   | $200k+   | $0-free
 
 ---
 
-**Document maintained by @nsin08**  
-**Last updated: February 2026**  
+**Document maintained by @nsin08**
+**Last updated: February 2026**
 **Repository**: https://github.com/nsin08/ai_drones
+---
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [02_TECHNICAL_OVERVIEW.md](02_TECHNICAL_OVERVIEW.md) • **Next:** [04_TECHNICAL_PAPER.md](04_TECHNICAL_PAPER.md)

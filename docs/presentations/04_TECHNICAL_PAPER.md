@@ -1,11 +1,27 @@
 ﻿# Autonomous Drone Fleet Operations: Complete Technical Paper
 
-**Date:** February 2026  
-**Authors:** AI Drone Fleet Operations Team  
-**Classification:** Technical White Paper  
+**Date:** February 2026
+**Authors:** AI Drone Fleet Operations Team
+**Classification:** Technical White Paper
 **Audience:** Research-oriented, deep technical implementation details
 
-**Suite Index:** [00_INDEX.md](00_INDEX.md) • **References:** [07_REFERENCES.md](07_REFERENCES.md)
+
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [03_VISUAL_ARCHITECTURE_GUIDE.md](03_VISUAL_ARCHITECTURE_GUIDE.md) • **Next:** [05_AI_INTEGRATION_ROADMAP.md](05_AI_INTEGRATION_ROADMAP.md)
+
+## Table of Contents
+
+- [Abstract](#abstract)
+- [1. Introduction](#1-introduction)
+- [2. System Architecture](#2-system-architecture)
+- [3. Drone Autonomy & Flight Control](#3-drone-autonomy-flight-control)
+- [4. Multi-Agent Coordination & Swarm Algorithms](#4-multi-agent-coordination-swarm-algorithms)
+- [5. AI Integration & Edge Inference](#5-ai-integration-edge-inference)
+- [6. Performance Analysis](#6-performance-analysis)
+- [7. Security & Robustness](#7-security-robustness)
+- [8. Results & Validation (POC v0.0.2)](#8-results-validation-poc-v002)
+- [9. Future Work & Production Roadmap](#9-future-work-production-roadmap)
+- [Conclusion](#conclusion)
+- [References](#references)
 
 ---
 
@@ -323,24 +339,24 @@ def navigate_to_waypoint(current_pos, target_waypoint, heading):
     Compute desired velocity vector toward waypoint.
     Uses cross-track error (CTE) control for smooth tracking.
     """
-    
+
     # Calculate distance and bearing to waypoint
     distance = haversine(current_pos, target_waypoint)
     bearing = calculate_bearing(current_pos, target_waypoint)
-    
+
     # PID controller for distance (proportional control)
     speed_error = distance - desired_speed * dt
     desired_velocity = kp_speed * speed_error
-    
+
     # Cross-track error (lateral distance from ideal path)
     ideal_track = bearing_to_prev_wp
     track_error = bearing - ideal_track
     lateral_velocity = kp_track * track_error
-    
+
     # Desired acceleration (F = ma, where a is control input)
     desired_ax = desired_velocity * cos(bearing)
     desired_ay = desired_velocity * sin(bearing)
-    
+
     return (desired_ax, desired_ay)
 ```
 
@@ -397,7 +413,7 @@ Where:
 For each IMU sample (400Hz):
   1. Predict: x̂ = f(x̂, u, Δt)  [dead reckoning]
   2. Update covariance: P = A·P·A^T + Q
-  
+
 Every 100ms (when GPS available):
   3. Compute Kalman gain: K = P·H^T·(H·P·H^T + R)^-1
   4. Update state: x̂ = x̂ + K·(z - H·x̂)  [fuse GPS]
@@ -453,20 +469,20 @@ class FormationControl:
             'GUARD': (-0.0006, 0, 0),       # 60m behind
             'SCOUT': (-0.0009, 0, 0),       # 90m behind
         }
-    
+
     def update(self, leader_state, dt):
         leader_pos = leader_state.position
-        
+
         for follower_id, role in self.followers.items():
             offset = self.offsets[role]
-            
+
             # Target position = leader + role-specific offset
             target = add_offset_to_position(leader_pos, offset, leader_state.heading)
-            
+
             # PID control: move toward target
             error = target - follower_current_pos[follower_id]
             control_input = kp * error + kd * derivative(error)
-            
+
             # Publish waypoint to follower drone
             publish_command(follower_id, 'GOTO', target)
 ```
@@ -491,7 +507,7 @@ class FormationControl:
                     ▲
                     │
                   REAR (Behind)
-                  
+
 Distance: 30-50m from asset center
 Coverage: 360° with overlapping detection arcs
 ```
@@ -504,23 +520,23 @@ class EscortFormation:
         self.asset_id = asset_id
         self.roles = ['POINT', 'WINGMAN_L', 'WINGMAN_R', 'REAR', 'TOP']
         self.spacing = 50  # meters
-    
+
     def compute_positions(self, asset_pos, asset_heading):
         positions = {}
-        
+
         # POINT: 50m ahead of asset
         positions['POINT'] = offset_forward(asset_pos, 50, asset_heading)
-        
+
         # WINGMAN_L/R: 50m left/right
         positions['WINGMAN_L'] = offset_left(asset_pos, 50, asset_heading)
         positions['WINGMAN_R'] = offset_right(asset_pos, 50, asset_heading)
-        
+
         # REAR: 50m behind
         positions['REAR'] = offset_backward(asset_pos, 50, asset_heading)
-        
+
         # TOP: 30m above
         positions['TOP'] = (asset_pos[0], asset_pos[1], asset_pos[2] + 30)
-        
+
         return positions
 ```
 
@@ -545,7 +561,7 @@ class EscortFormation:
         1 ───┼─── 4
               │
               S
-        
+
 Center: (lat, lon)
 Radius: 500m
 Drones: Evenly spaced on circle (e.g., 8 drones = 45° apart)
@@ -560,28 +576,28 @@ class PerimeterFormation:
         self.center = center
         self.radius = radius
         self.angular_spacing = 360 / num_drones
-    
+
     def compute_positions(self, time_t, num_drones):
         positions = []
-        
+
         for i in range(num_drones):
             # Base angle for drone i
             base_angle = self.angular_spacing * i
-            
+
             # Optional: rotate entire formation over time (slowly orbit)
             rotation = 0.5 * time_t  # 0.5°/sec rotation
             angle = base_angle + rotation
-            
+
             # Convert to lat/lon offset
             offset_lat = self.radius * cos(angle) / 111320
             offset_lon = self.radius * sin(angle) / (111320 * cos(self.center[0]))
-            
+
             lat = self.center[0] + offset_lat
             lon = self.center[1] + offset_lon
             alt = 150
-            
+
             positions.append((lat, lon, alt))
-        
+
         return positions
 ```
 
@@ -622,61 +638,61 @@ class CBBA:
         self.my_bundle = []
         self.my_bids = {}
         self.known_bids = {}  # (task_id, drone_id) -> bid
-    
+
     def bundling_phase(self):
         """Build initial task bundle"""
         remaining_budget = self.cost_budget  # e.g., 500 points
-        
+
         # Sort tasks by value (descending)
-        sorted_tasks = sorted(self.all_tasks, 
-                            key=lambda t: t.value, 
+        sorted_tasks = sorted(self.all_tasks,
+                            key=lambda t: t.value,
                             reverse=True)
-        
+
         for task in sorted_tasks:
             cost = self.compute_cost(task)
-            
+
             if cost <= remaining_budget:
                 self.my_bundle.append(task)
                 self.my_bids[task.id] = cost
                 remaining_budget -= cost
-    
+
     def consensus_phase(self):
         """Iterate until convergence"""
         max_iterations = 10
-        
+
         for iteration in range(max_iterations):
             # Broadcast my bids
             for task_id, bid in self.my_bids.items():
                 publish_bid(task_id, bid, self.drone_id)
-            
+
             # Receive other drones' bids (wait 0.1s)
             sleep(0.1)
             bids_from_others = receive_bids()
-            
+
             # Re-evaluate bundle
             changed = False
             for task_id in list(self.my_bids.keys()):
                 my_bid = self.my_bids[task_id]
-                others_bids = [b for t, b, d in bids_from_others 
+                others_bids = [b for t, b, d in bids_from_others
                               if t == task_id and d != self.drone_id]
-                
+
                 if others_bids and min(others_bids) < my_bid:
                     # Another drone has better bid, remove from my bundle
                     self.my_bundle.remove_task(task_id)
                     del self.my_bids[task_id]
                     changed = True
-            
+
             if not changed:
                 break  # Converged
-        
+
         return self.my_bundle
-    
+
     def compute_cost(self, task):
         """Cost = distance to task + current_workload_penalty"""
         distance = haversine(self.position, task.position)
         workload = len(self.my_bundle) * 10  # Penalize overloaded drones
         battery_cost = distance / (self.battery_pct / 100 + 0.1)
-        
+
         return distance + workload + battery_cost
 ```
 
@@ -696,43 +712,43 @@ class PotentialFieldController:
         self.k_separation = 100  # Repulsion from other drones
         self.k_obstacle = 500    # Repulsion from obstacles
         self.min_spacing = 20    # Meters
-    
+
     def compute_control(self, my_pos, goal, nearby_drones, obstacles):
         """Compute desired velocity"""
-        
+
         # Goal attraction
         goal_direction = normalize(goal - my_pos)
         goal_distance = length(goal - my_pos)
         F_goal = self.k_goal * goal_direction * min(goal_distance, 50)
-        
+
         # Drone separation (repulsion)
         F_separation = np.zeros(3)
         for drone_pos in nearby_drones:
             separation = my_pos - drone_pos
             distance = length(separation)
-            
+
             if distance < self.min_spacing:
                 # Strong repulsion when too close
                 F_separation += (self.k_separation / (distance**2 + 0.01)) * \
                                normalize(separation)
-        
+
         # Obstacle avoidance
         F_obstacle = np.zeros(3)
         for obstacle in obstacles:
             separation = my_pos - obstacle.center
             distance = length(separation)
-            
+
             if distance < obstacle.radius + 20:
                 # Repulsion proportional to proximity
                 F_obstacle += (self.k_obstacle / (distance**2 + 0.1)) * \
                              normalize(separation)
-        
+
         # Total force
         F_total = F_goal + F_separation + F_obstacle
-        
+
         # Velocity command (proportional to force)
         v_desired = normalize(F_total) * self.max_speed
-        
+
         return v_desired
 ```
 
@@ -764,14 +780,14 @@ class BatterySagDetector:
     def __init__(self):
         self.threshold_drop_pct_per_sec = 0.05
         self.look_back_window = 10  # seconds
-    
+
     def check(self, telemetry_history):
         recent = telemetry_history[-self.look_back_window:]
-        
-        pct_changes = [recent[i].battery - recent[i-1].battery 
+
+        pct_changes = [recent[i].battery - recent[i-1].battery
                       for i in range(1, len(recent))]
         avg_drop_rate = np.mean(pct_changes)
-        
+
         if avg_drop_rate < -self.threshold_drop_pct_per_sec:
             return {
                 'type': 'BATTERY_SAG',
@@ -818,14 +834,14 @@ history = autoencoder.fit(normal_telemetry, normal_telemetry,
 @mqtt_client.on_message
 def process_telemetry(msg):
     telemetry = parse_message(msg)
-    
+
     # Normalize features to [0,1]
     x = normalize(telemetry)
-    
+
     # Compute reconstruction error
     x_hat = autoencoder.predict(x, verbose=0)
     reconstruction_error = mse(x, x_hat)
-    
+
     # Anomaly threshold (95th percentile of training errors)
     if reconstruction_error > threshold:
         publish_alert({
@@ -877,7 +893,7 @@ training_data = pd.read_csv('component_failures.csv')
 # Columns: flight_hours, avg_motor_temp, avg_vibration, charge_cycles, failed (0/1)
 
 cph = CoxPHFitter()
-cph.fit(training_data, 
+cph.fit(training_data,
         duration_col='flight_hours',
         event_col='failed')
 
@@ -939,41 +955,41 @@ class DroneNavigationEnv(gym.Env):
         self.wind = wind
         self.drone_pos = start
         self.path = [start]
-    
+
     def reset(self):
         self.drone_pos = self.start
         self.path = [self.start]
         return np.array([*self.drone_pos, *self.goal, self.wind_speed, self.wind_direction])
-    
+
     def step(self, action):
         """Action: [dX, dY, dZ] - next waypoint offset"""
-        
+
         # Move drone
         next_pos = self.drone_pos + action * 10  # 10m per action unit
-        
+
         # Check constraints
         reward = 0
         done = False
-        
+
         # Obstacle collision
         if self.collides_with_obstacle(next_pos):
             reward = -100
             done = True
-        
+
         # Goal reached
         elif distance(next_pos, self.goal) < 10:
             reward = 1000
             done = True
-        
+
         # Intermediate waypoint
         else:
             # Reward: negative time penalty, positive for wind-assisted flight
             wind_boost = 0.1 if self.has_tailwind(next_pos) else 0
             reward = -1 + wind_boost  # -1 per step (minimize path length)
-        
+
         self.drone_pos = next_pos
         self.path.append(next_pos)
-        
+
         return self.state_vector(), reward, done, {}
 
 # Train agent
@@ -1015,15 +1031,15 @@ return path
 Test 1: Telemetry latency (MQTT publish → InfluxDB write)
   Measurement: Record timestamp at publish, timestamp at DB write
   Result: 45-85ms (mean 62ms, 95th %ile 78ms)
-  
+
 Test 2: Command latency (UI click → MQTT publish → drone ACK → UI display)
   Measurement: End-to-end from button click to ACK receipt
   Result: 190-320ms (mean 245ms, 95th %ile 310ms)
-  
+
 Test 3: Dashboard refresh (InfluxDB query → Grafana render)
   Measurement: Query time + rendering time
   Result: 500-1500ms (mean 850ms, limited by Grafana refresh interval 2s)
-  
+
 Test 4: State update propagation (drone state change → all clients notified)
   Measurement: Broadcast latency via WebSocket
   Result: 30-90ms (mean 55ms, 95th %ile 85ms)
@@ -1134,27 +1150,27 @@ def issue_command(operator, drone_id, cmd, params):
     # Step 1: Authentication
     if not is_authenticated(operator):
         raise AuthenticationError("User not authenticated")
-    
+
     # Step 2: Authorization
     if not operator_has_permission(operator, drone_id):
         raise AuthorizationError(f"Operator {operator} cannot control {drone_id}")
-    
+
     # Step 3: Validation
     if not is_valid_command(cmd):
         raise ValueError(f"Unknown command: {cmd}")
-    
+
     # Step 4: State check
     drone_state = get_drone_state(drone_id)
     if cmd == 'ARM' and drone_state.mode == 'RTL':
         raise ValueError("Cannot arm during RTL")
-    
+
     # Step 5: Geofence check
     if cmd == 'GOTO' and not within_geofence(params['lat'], params['lon']):
         raise ValueError("Target outside authorized geofence")
-    
+
     # Step 6: Log for audit trail
     log_command_attempt(operator, drone_id, cmd, params, 'APPROVED')
-    
+
     # Step 7: Execute with timeout
     execute_with_timeout(drone_id, cmd, params, timeout=10s)
 ```
@@ -1309,7 +1325,9 @@ By leveraging open standards and building on mature technologies, we avoid vendo
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: February 2026  
-**Authors**: AI Drone Fleet Operations Team  
-**Repository**: https://github.com/nsin08/ai_drones  
+**Document Version**: 1.0
+**Last Updated**: February 2026
+**Authors**: AI Drone Fleet Operations Team
+**Repository**: https://github.com/nsin08/ai_drones
+---
+**Suite:** [00_INDEX.md](00_INDEX.md) • **Previous:** [03_VISUAL_ARCHITECTURE_GUIDE.md](03_VISUAL_ARCHITECTURE_GUIDE.md) • **Next:** [05_AI_INTEGRATION_ROADMAP.md](05_AI_INTEGRATION_ROADMAP.md)

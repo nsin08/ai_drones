@@ -2,7 +2,7 @@
 import json
 import time
 import threading
-from typing import Callable, Dict, List, Optional, Any
+from typing import Callable, Dict, List, Any
 import paho.mqtt.client as mqtt
 from src.ports.message_broker import MessageBroker
 
@@ -91,12 +91,12 @@ class MQTTBrokerAdapter(MessageBroker):
         self._client.disconnect()
         self._connected = False
     
-    def publish(self, topic: str, message: str) -> bool:
+    def publish(self, topic: str, payload: Dict[str, Any]) -> bool:
         """Publish message to topic.
         
         Args:
             topic: MQTT topic (e.g., 'telemetry/D001')
-            message: Message payload (JSON string)
+            payload: Message payload (JSON-serializable dict)
         
         Returns:
             True if published successfully
@@ -105,18 +105,19 @@ class MQTTBrokerAdapter(MessageBroker):
             return False
         
         try:
+            message = json.dumps(payload, separators=(",", ":"))
             result = self._client.publish(topic, message, qos=1)
             return result.rc == mqtt.MQTT_ERR_SUCCESS
         except Exception as e:
             print(f"[MQTT] Publish error on {topic}: {e}")
             return False
     
-    def subscribe(self, topic: str, callback: Callable[[str, str], None]) -> bool:
+    def subscribe(self, topic_pattern: str, callback: Callable[[str, Dict[str, Any]], None]) -> bool:
         """Subscribe to topic with callback.
         
         Args:
-            topic: MQTT topic pattern (e.g., 'commands/+' subscribes to all commands)
-            callback: Function(topic, message) called when message received
+            topic_pattern: MQTT topic pattern (supports '+' wildcard)
+            callback: Function(topic, payload_dict) called when message received
         
         Returns:
             True if subscription succeeded
@@ -125,15 +126,15 @@ class MQTTBrokerAdapter(MessageBroker):
             return False
         
         with self._lock:
-            if topic not in self._subscribers:
-                self._subscribers[topic] = []
-            self._subscribers[topic].append(callback)
+            if topic_pattern not in self._subscribers:
+                self._subscribers[topic_pattern] = []
+            self._subscribers[topic_pattern].append(callback)
         
         try:
-            result = self._client.subscribe(topic, qos=1)
+            result = self._client.subscribe(topic_pattern, qos=1)
             return result[0] == mqtt.MQTT_ERR_SUCCESS
         except Exception as e:
-            print(f"[MQTT] Subscribe error on {topic}: {e}")
+            print(f"[MQTT] Subscribe error on {topic_pattern}: {e}")
             return False
     
     def unsubscribe(self, topic: str) -> bool:
@@ -175,12 +176,35 @@ class MQTTBrokerAdapter(MessageBroker):
     def _on_message(self, client, userdata, msg):
         """Called when message received from subscribed topic."""
         topic = msg.topic
-        payload = msg.payload.decode("utf-8")
+        raw = msg.payload.decode("utf-8")
+        try:
+            payload: Dict[str, Any] = json.loads(raw) if raw else {}
+        except Exception:
+            payload = {"_raw": raw}
         
         with self._lock:
-            if topic in self._subscribers:
-                for callback in self._subscribers[topic]:
+            for pattern, callbacks in self._subscribers.items():
+                if not self._topic_matches(topic, pattern):
+                    continue
+                for callback in callbacks:
                     try:
                         callback(topic, payload)
                     except Exception as e:
                         print(f"[MQTT] Callback error on {topic}: {e}")
+
+    @staticmethod
+    def _topic_matches(topic: str, pattern: str) -> bool:
+        """Topic matching with '+' wildcard (single level)."""
+        topic_parts = topic.split("/")
+        pattern_parts = pattern.split("/")
+
+        if len(topic_parts) != len(pattern_parts):
+            return False
+
+        for t, p in zip(topic_parts, pattern_parts):
+            if p == "+":
+                continue
+            if t != p:
+                return False
+
+        return True

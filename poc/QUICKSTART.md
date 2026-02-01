@@ -1,5 +1,7 @@
 # Quick Start: Run the PoC
 
+**Last reviewed:** February 1, 2026
+
 ## 1. Setup (2 minutes)
 
 ```powershell
@@ -24,8 +26,10 @@ tests/unit/test_rf_loss_burst.py::TestRFLossBurstFault::test_drops_message_durin
 tests/unit/test_telemetry.py::TestPosition::test_create_valid_position PASSED
 tests/unit/test_telemetry.py::TestTelemetry::test_create_valid_telemetry PASSED
 ...
-===================== 20 passed in 0.5s =====================
+===================== 56 passed in 2.0s =====================
 ```
+
+Note: Run `pytest poc/tests/unit -q` from repo root to confirm the current count on your machine.
 
 ## 3. Run Demo
 
@@ -35,8 +39,10 @@ tests/unit/test_telemetry.py::TestTelemetry::test_create_valid_telemetry PASSED
 python demo.py --faults all --messages 40
 ```
 
+To publish the same stream to a real MQTT broker, add `--broker mqtt` (requires `ops/docker-compose.yml` running).
+
 **Watch for:**
-- **RF_LOSS_BURST**: Messages dropped (❌ DROPPED)
+- **RF_LOSS_BURST**: Messages dropped (DROPPED)
 - **GNSS_MULTIPATH**: Position offsets (lat/lon changes)
 - **EKF_UNHEALTHY**: Position noise (altitude/position jitter)
 - **THRUST_SHORTFALL**: Altitude loss (alt_m decreases)
@@ -71,13 +77,13 @@ python demo.py --broker memory --messages 20
 
 [PoC Demo] Simulating 40 telemetry messages (0.5s intervals)...
 
-[00] D001 @ t=0.0s  → ✅ PASSED                                              (bat: 100.0%)
-[01] D001 @ t=0.5s  → ✅ PASSED                                              (bat: 99.9%)
+[00] D001 @ t=0.0s  -> PASSED                                               (bat: 100.0%)
+[01] D001 @ t=0.5s  -> PASSED                                               (bat: 99.9%)
 ...
-[12] D001 @ t=6.0s  → ❌ DROPPED     [RF_LOSS_BURST]                         (battery: 98.8%)
+[12] D001 @ t=6.0s  -> DROPPED    [RF_LOSS_BURST]                            (battery: 98.8%)
 ...
-[20] D001 @ t=10.0s → ✅ PASSED      [GNSS_MULTIPATH]                        (bat: 98.0%, alt: 100.0m)
-[21] D001 @ t=10.5s → ✅ PASSED      [GNSS_MULTIPATH]                        (bat: 97.9%, alt: 100.0m)
+[20] D001 @ t=10.0s -> PASSED      [GNSS_MULTIPATH]                          (bat: 98.0%, alt: 100.0m)
+[21] D001 @ t=10.5s -> PASSED      [GNSS_MULTIPATH]                          (bat: 97.9%, alt: 100.0m)
 ...
 
 [PoC Demo] ========== SUMMARY ==========
@@ -92,16 +98,16 @@ python demo.py --broker memory --messages 20
     RF_LOSS_BURST: 8 times
     THRUST_SHORTFALL: 9 times
 
-[PoC Demo] ✅ All 5 fault model(s) demonstrated!
+[PoC Demo] OK: All 5 fault model(s) demonstrated
 ```
 
 ## What This Proves
 
-✅ **All 5 fault models working** (RF_LOSS_BURST, GNSS_MULTIPATH, EKF_UNHEALTHY, THRUST_SHORTFALL, BATTERY_SAG)  
-✅ **Domain logic has ZERO external dependencies**  
-✅ **Tests run in <2 seconds (56 tests, no MQTT broker needed)**  
-✅ **Easy to swap InMemory ↔ MQTT brokers**  
-✅ **Fault models are pluggable via registry**  
+OK: **All 5 fault models working** (RF_LOSS_BURST, GNSS_MULTIPATH, EKF_UNHEALTHY, THRUST_SHORTFALL, BATTERY_SAG)  
+OK: **Domain logic has zero external dependencies**  
+OK: **Tests run in <2 seconds (56 tests, no MQTT broker needed)**  
+OK: **Easy to swap InMemory <-> MQTT brokers**  
+OK: **Fault models are pluggable via registry**  
 
 ## Observing Missions Live
 
@@ -109,7 +115,7 @@ The demo shows **simulated telemetry** with faults injected in real-time. Watch 
 
 | Fault | Observable Effect | Demo Flag |
 |-------|-------------------|-----------|
-| **RF_LOSS_BURST** | Message drops (❌ DROPPED) | `--faults rf` |
+| **RF_LOSS_BURST** | Message drops (DROPPED) | `--faults rf` |
 | **GNSS_MULTIPATH** | Position offsets (lat/lon changes) | `--faults gnss` |
 | **EKF_UNHEALTHY** | Position noise (random jitter) | `--faults ekf` |
 | **THRUST_SHORTFALL** | Altitude loss (alt_m decreases) | `--faults thrust` |
@@ -119,4 +125,4 @@ Run `python demo.py --help` to see all options.
 
 ## Next Steps
 
-See [poc/README.md](README.md) for architecture details and [.context/project/IMPLEMENTATION-PLAN-TDD.md](../.context/project/IMPLEMENTATION-PLAN-TDD.md) for full implementation plan.
+See [poc/README.md](README.md) for architecture details. For broader project notes/runbooks, see `.context/project/docs/13_demo_runbook.md` and `.context/project/docs/14_mqttcool_steps.md`.
