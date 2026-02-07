@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mosquitto:
     image: eclipse-mosquitto:2.0
@@ -14,7 +12,9 @@ services:
     environment:
       TZ: UTC
     healthcheck:
-      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$SYS/broker/clients/connected"]
+      # NOTE: Use $$ to avoid Compose env-var interpolation of $SYS.
+      # -C 1: exit after one message; -W: timeout for receiving a message.
+      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$$SYS/broker/uptime", "-C", "1", "-W", "3"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -81,6 +81,50 @@ services:
       - fleet-network
     environment:
       - INFLUX_TOKEN=my-super-secret-auth-token
+
+  inventory:
+    build:
+      context: ../inventory
+    container_name: drone-inventory
+    ports:
+      - "8001:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - DRONE_LABEL=com.ai_drones.kind=drone
+      - MAVLINK_DIALECT=ardupilotmega
+      - MAVLINK_ENDPOINT_TEMPLATE=tcp:{ip}:5760
+    depends_on:
+      - mosquitto
+    networks:
+      - fleet-network
+
+  mission-control:
+    build:
+      context: ../poc
+    container_name: mission-control
+    ports:
+      - "5000:5000"
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - INVENTORY_URL=http://inventory:8000
+    depends_on:
+      - mosquitto
+      - inventory
+    networks:
+      - fleet-network
+
+  drone:
+    image: radarku/ardupilot-sitl
+    labels:
+      - com.ai_drones.kind=drone
+    expose:
+      - "5760"
+    networks:
+      - fleet-network
 
 volumes:
   mosquitto_data:
