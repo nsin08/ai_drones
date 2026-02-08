@@ -82,17 +82,16 @@ def run_mqtt_demo(
     # Setup subscription to monitor commands (from Mission Planner)
     received_commands = []
     
-    def on_command(topic: str, payload: str):
+    def on_command(topic: str, payload):
         try:
-            cmd = json.loads(payload)
+            cmd = payload if isinstance(payload, dict) else json.loads(payload)
             received_commands.append(cmd)
             print(f"\n[Command] Received on {topic}:")
             print(f"  {json.dumps(cmd, indent=2)}")
         except Exception as e:
             print(f"[Error] Failed to parse command: {e}")
     
-    broker.subscribe("ai_drones/commands/D001/mission", on_command)
-    broker.subscribe("ai_drones/commands/D001/rtl", on_command)
+    broker.subscribe("fleet/D001/command", on_command)
     
     print("[Setup] ✅ Subscribed to commands")
     
@@ -144,8 +143,8 @@ def run_mqtt_demo(
             }
             
             success = broker.publish(
-                f"ai_drones/telemetry/D001",
-                json.dumps(payload)
+                f"fleet/D001/telemetry",
+                payload
             )
             if success:
                 stats["published"] += 1
@@ -161,8 +160,8 @@ def run_mqtt_demo(
                 "timestamp": time.time()
             }
             broker.publish(
-                f"ai_drones/faults/D001",
-                json.dumps(fault_payload)
+                f"fleet/D001/faults",
+                fault_payload
             )
         
         print(f"[{msg_num:03d}] t={sim_time:5.1f}s | Battery: {battery:5.1f}% | {status}")
@@ -181,10 +180,10 @@ def run_mqtt_demo(
     print(f"  Commands rcvd:  {len(received_commands)}")
     
     print("\n[MQTT Topics to Monitor in MQTT.Cool]")
-    print("  Sub: ai_drones/# (all topics)")
-    print("  Sub: ai_drones/telemetry/D001 (live telemetry)")
-    print("  Sub: ai_drones/faults/D001 (fault notifications)")
-    print("  Pub: ai_drones/commands/D001/mission (send commands)")
+    print("  Sub: fleet/# (all topics)")
+    print("  Sub: fleet/D001/telemetry (live telemetry)")
+    print("  Sub: fleet/D001/faults (fault notifications)")
+    print("  Pub: fleet/D001/command (send commands)")
     
     print("\n[Fleet Services That Can Subscribe]")
     print("  ✓ Mission Planner: Receives telemetry + faults")

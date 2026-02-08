@@ -6,7 +6,7 @@ This repo contains a **no-hardware** MVP/PoC for drone fleet operations concepts
 
 - A **fault-model PoC** built with **TDD + hexagonal architecture** (`poc/src/domain/*` + tests).
 - A minimal **Mission Control UI** (`poc/mission_control.py`) to visualize and command a simulated fleet over MQTT.
-- An **integration demo** (`integration/demo_mqtt.py`) that uses a simpler topic namespace for quick MQTT testing.
+- An **integration demo** (`integration/demo_mqtt.py`) that uses the `fleet/...` namespace for MQTT testing.
 - A **presentation suite** for technical + executive audiences (`docs/presentations/00_INDEX.md`).
 
 ## What you can demo (today)
@@ -19,7 +19,7 @@ This repo contains a **no-hardware** MVP/PoC for drone fleet operations concepts
 
 - `docs/presentations/00_INDEX.md` — start here for the full presentation suite.
 - `poc/` — PoC domain models + tests + `mission_simulator.py` + `mission_control.py`.
-- `integration/` — MQTT integration demo using the `ai_drones/...` topic prefix.
+- `integration/` — MQTT integration demo using the `fleet/...` topic prefix.
 - `ops/` — local stack via Docker Compose (Mosquitto + InfluxDB + Grafana + Telegraf).
 - `.context/` — working notes, plans, and draft docs (not required to run the PoC).
 
@@ -40,7 +40,24 @@ This repo contains a **no-hardware** MVP/PoC for drone fleet operations concepts
    - Terminal A: `python mission_simulator.py`
    - Terminal B: `python mission_control.py` then open `http://localhost:5000`
 
+## Inventory + Drone Containers (ArduPilot SITL)
+
+The ops stack now includes a **drone inventory service** and a **compose-scaled drone service**.
+
+1) Start ops stack (includes inventory + Mission Control):
+   - `cd ops`
+   - `docker compose up -d`
+
+2) Start multiple drone containers:
+   - `docker compose up -d --scale drone=3`
+
+3) View inventory:
+   - `http://localhost:8001/inventory`
+
+4) Open the Mission Planner UI:
+   - `http://localhost:5000/planner`
+
 ## Topic namespaces (important)
 
 - `fleet/...` — used by the PoC mission simulator + mission control + ops ingestion (`ops/telegraf.conf`).
-- `ai_drones/...` — used by `integration/demo_mqtt.py` (quick MQTT demo pattern).
+- `fleet/...` — used by `integration/demo_mqtt.py` (quick MQTT demo pattern).

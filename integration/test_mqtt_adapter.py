@@ -31,7 +31,7 @@ class TestMQTTBrokerAdapter:
         
         success = adapter.publish(
             "test/topic",
-            json.dumps({"test": "data"})
+            {"test": "data"}
         )
         assert success, "Should publish successfully"
         adapter.disconnect()
@@ -53,7 +53,7 @@ class TestMQTTBrokerAdapter:
         
         # Publish message
         msg = {"test": "message", "number": 123}
-        adapter.publish("test/receive", json.dumps(msg))
+        adapter.publish("test/receive", msg)
         
         # Wait for callback
         time.sleep(0.5)
@@ -62,7 +62,7 @@ class TestMQTTBrokerAdapter:
         assert len(received) == 1, "Should receive 1 message"
         topic, payload = received[0]
         assert topic == "test/receive"
-        assert json.loads(payload) == msg
+        assert payload == msg
         
         adapter.disconnect()
     
@@ -85,15 +85,15 @@ class TestMQTTBrokerAdapter:
         time.sleep(0.5)
         
         msg = {"test": "broadcast"}
-        adapter.publish("test/multi", json.dumps(msg))
+        adapter.publish("test/multi", msg)
         
         time.sleep(0.5)
         
         # Both should receive
         assert len(received1) == 1
         assert len(received2) == 1
-        assert json.loads(received1[0][1]) == msg
-        assert json.loads(received2[0][1]) == msg
+        assert received1[0][1] == msg
+        assert received2[0][1] == msg
         
         adapter.disconnect()
     
@@ -112,9 +112,9 @@ class TestMQTTBrokerAdapter:
         time.sleep(0.5)
         
         # Publish to different subtopics
-        adapter.publish("test/wildcard/alpha", json.dumps({"n": 1}))
-        adapter.publish("test/wildcard/beta", json.dumps({"n": 2}))
-        adapter.publish("test/wildcard/gamma", json.dumps({"n": 3}))
+        adapter.publish("test/wildcard/alpha", {"n": 1})
+        adapter.publish("test/wildcard/beta", {"n": 2})
+        adapter.publish("test/wildcard/gamma", {"n": 3})
         
         time.sleep(0.5)
         
@@ -144,7 +144,7 @@ class TestMQTTBrokerAdapter:
         time.sleep(0.5)
         
         # Publish after unsubscribe
-        adapter.publish("test/unsub", json.dumps({"msg": "test"}))
+        adapter.publish("test/unsub", {"msg": "test"})
         time.sleep(0.5)
         
         # Should not receive
@@ -159,9 +159,9 @@ class TestMQTTBrokerAdapter:
         received = []
         
         def callback(topic, payload):
-            received.append(json.loads(payload))
+            received.append(payload)
         
-        assert adapter.subscribe("ai_drones/telemetry/D001", callback)
+        assert adapter.subscribe("fleet/D001/telemetry", callback)
         time.sleep(0.5)
         
         # Publish telemetry in standard format
@@ -180,8 +180,8 @@ class TestMQTTBrokerAdapter:
         }
         
         adapter.publish(
-            "ai_drones/telemetry/D001",
-            json.dumps(telemetry)
+            "fleet/D001/telemetry",
+            telemetry
         )
         
         time.sleep(0.5)

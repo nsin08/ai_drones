@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "InventorySnapshot",
+  "type": "object",
+  "properties": {
+    "timestamp": { "type": "number" },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/InventoryItem" }
+    }
+  },
+  "required": ["timestamp", "items"],
+  "definitions": {
+    "InventoryItem": {
+      "type": "object",
+      "properties": {
+        "drone_id": { "type": "string" },
+        "status": { "type": "string" },
+        "health": { "type": "string" },
+        "battery_pct": { "type": ["number", "null"] },
+        "position": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": ["number", "null"] },
+            "lon": { "type": ["number", "null"] },
+            "alt_m": { "type": ["number", "null"] }
+          }
+        },
+        "velocity_mps": { "type": ["number", "null"] },
+        "mode": { "type": ["number", "null"] },
+        "armed": { "type": ["boolean", "null"] },
+        "gps_fix": { "type": ["number", "null"] },
+        "satellites_visible": { "type": ["number", "null"] },
+        "last_seen": { "type": ["number", "null"] },
+        "current_role": { "type": "string" },
+        "assigned_mission": { "type": ["string", "null"] },
+        "mavlink_endpoint": { "type": "string" },
+        "source": { "type": "object" }
+      },
+      "required": ["drone_id", "status", "current_role"]
+    }
+  }
+}

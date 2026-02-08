@@ -117,6 +117,21 @@ services:
     networks:
       - fleet-network
 
+  swarmsim:
+    build:
+      context: ../swarmsim
+    container_name: swarmsim
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - SIM_FAIL_RATE=0.02
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    networks:
+      - fleet-network
+    restart: unless-stopped
+
   drone:
     image: radarku/ardupilot-sitl
     labels:

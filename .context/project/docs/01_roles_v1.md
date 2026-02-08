@@ -1,4 +1,4 @@
-# Roles v1 (5 Roles)
+# Roles v1 (7 Roles)
 
 These are *behavior templates* and constraints, not permissions.
 
@@ -40,6 +40,22 @@ Constraints:
 - often holds position at optimal comms location
 Outputs:
 - link quality metrics, “telemetry gap risk” alerts
+
+## Role: GUARD
+Purpose: static or slow-move perimeter watch, sector coverage and alerting.
+Constraints:
+- maintains assigned sector boundaries
+- prioritizes stability and detection over speed
+Outputs:
+- perimeter breach alerts, sector coverage health
+
+## Role: CARGO
+Purpose: payload delivery and logistics support.
+Constraints:
+- follows payload safety constraints (shock, temp, tilt as applicable)
+- prioritizes safe route and landing precision
+Outputs:
+- payload status, delivery milestones, landing approach health
 
 ## Role invariants (all roles)
 - Never override ArduPilot safety failsafes

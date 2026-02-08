@@ -11,6 +11,10 @@
 - fleet/groups/<groupId>/members         (retained)
 - fleet/groups/<groupId>/status
 
+## Commands & acks (mission control/planner publishes)
+- fleet/<droneId>/command
+- fleet/system/command_ack
+
 ## Intents (operator or orchestrator publishes)
 - fleet/intents/<intentId>
 - fleet/groups/<groupId>/intent
@@ -27,6 +31,10 @@
 ## Acks (operator/system publishes)
 - fleet/acks/<intentId>
 - fleet/acks/<recommendationId>
+
+## Inventory (inventory service publishes)
+- fleet/system/inventory
+- fleet/system/inventory/<droneId>
 
 ## Retain/QoS guidance
 - telemetry: QoS0 or QoS1 (MVP uses QoS1 for simplicity)

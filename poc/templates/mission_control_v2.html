@@ -241,6 +241,47 @@
             max-height: 300px;
             overflow-y: auto;
         }
+
+        .inventory-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+
+        .inventory-item {
+            padding: 10px;
+            background: #0f3460;
+            border-radius: 6px;
+            border-left: 3px solid #00d4ff;
+            font-size: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .inventory-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .inventory-actions {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+
+        .inventory-select {
+            padding: 4px 6px;
+            background: #0f3460;
+            border: 1px solid #00d4ff;
+            color: #fff;
+            border-radius: 4px;
+            font-size: 11px;
+        }
         
         .drone-item {
             padding: 10px;
@@ -622,6 +663,7 @@
                     <span class="value" id="headerLeader">---</span>
                 </div>
             </div>
+
         </div>
 
         <!-- LEFT PANEL: MISSION CONFIG -->
@@ -666,6 +708,7 @@
                     <input type="number" id="missionDuration" min="60" max="600" value="300" step="30">
                 </div>
                 <div class="button-group">
+                    <button class="primary" onclick="planMission()">🧭 PLAN MISSION</button>
                     <button class="primary" onclick="startMission()" id="startBtn">🚀 START MISSION</button>
                     <button onclick="stopMission()" id="stopBtn" style="display: none; background: #aa0000; border-color: #ff0000; color: #fff;">⏹️ STOP</button>
                 </div>
@@ -696,6 +739,32 @@
                 <div class="drone-list" id="dronesList">
                     <div style="color: #aaa; text-align: center; padding: 20px;">
                         Waiting for drones...
+                    </div>
+                </div>
+            </div>
+            <!-- Inventory -->
+            <div class="panel-section">
+                <h3>ðŸ“¦ Inventory</h3>
+                <div class="button-group" style="margin-top: 0;">
+                    <button onclick="loadInventory()">â†» Refresh Inventory</button>
+                </div>
+                <div id="inventoryStatus" style="margin-top: 8px; font-size: 11px; color: #aaa;"></div>
+                <div class="inventory-actions" style="margin-top: 8px;">
+                    <button class="drone-action-btn" onclick="selectAllInventory()">Select All</button>
+                    <button class="drone-action-btn" onclick="clearSelectedInventory()">Clear</button>
+                </div>
+                <div class="inventory-row" style="margin-top: 8px;">
+                    <select class="inventory-select" id="bulkRole">
+                        <option value="">Bulk Role...</option>
+                    </select>
+                    <button class="drone-action-btn" onclick="applyRoleToSelected()">Apply Role</button>
+                </div>
+                <div class="inventory-row" style="margin-top: 8px;">
+                    <button class="drone-action-btn" onclick="assignSelectedToMission()">Assign Selected to Mission</button>
+                </div>
+                <div class="inventory-list" id="inventoryList">
+                    <div style="color: #aaa; text-align: center; padding: 20px;">
+                        Waiting for inventory...
                     </div>
                 </div>
             </div>
@@ -768,6 +837,10 @@
                 <span>Guard</span>
             </div>
             <div class="legend-item">
+                <div class="legend-color" style="background: #F9A826;"></div>
+                <span>Cargo</span>
+            </div>
+            <div class="legend-item">
                 <div class="legend-color" style="background: #6C5B7B;"></div>
                 <span>Relay</span>
             </div>
@@ -785,6 +858,9 @@
         let altitudeData = {};
         let altitudeChart = null;
         let commandHistory = {};
+        let inventoryItems = [];
+        let selectedDrones = new Set();
+        const ROLE_OPTIONS = ['LEADER', 'POINT_MAN', 'WINGMAN', 'SCOUT', 'RELAY', 'GUARD', 'CARGO'];
 
         const ROLE_COLORS = {
             'LEADER': '#FFD700',      // Gold - premium authority
@@ -792,6 +868,7 @@
             'WINGMAN': '#4ECDC4',     // Teal - support wing
             'SCOUT': '#95E1D3',       // Mint - speed/explore
             'GUARD': '#C06C84',       // Mauve - protection
+            'CARGO': '#F9A826',       // Amber - logistics
             'RELAY': '#6C5B7B'        // Purple - communication
         };
 
@@ -1087,6 +1164,10 @@
         // ===== DRONES LIST ===== 
         function updateDronesList() {
             const list = document.getElementById('dronesList');
+            if (!list) {
+                document.getElementById('headerDroneCount').textContent = Object.keys(droneStates).length;
+                return;
+            }
             if (Object.keys(droneStates).length === 0) {
                 list.innerHTML = '<div style="color: #aaa; text-align: center; padding: 20px;">Waiting for drones...</div>';
                 document.getElementById('headerDroneCount').textContent = '0';
@@ -1124,6 +1205,196 @@
             });
             list.innerHTML = html;
             document.getElementById('headerDroneCount').textContent = Object.keys(droneStates).length;
+        }
+
+        function removeActiveDronesPanel() {
+            const list = document.getElementById('dronesList');
+            if (!list) return;
+            const panel = list.closest('.panel-section');
+            if (panel) {
+                panel.remove();
+            }
+        }
+
+        function populateBulkRoleOptions() {
+            const select = document.getElementById('bulkRole');
+            if (!select) return;
+            ROLE_OPTIONS.forEach(role => {
+                const option = document.createElement('option');
+                option.value = role;
+                option.textContent = role;
+                select.appendChild(option);
+            });
+        }
+
+        // ===== INVENTORY =====
+        async function loadInventory() {
+            const statusEl = document.getElementById('inventoryStatus');
+            try {
+                const response = await fetch('/api/inventory');
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || 'Inventory unavailable');
+                }
+                inventoryItems = Array.isArray(data) ? data : [];
+                const ids = new Set(inventoryItems.map(i => i.drone_id));
+                selectedDrones.forEach(id => {
+                    if (!ids.has(id)) selectedDrones.delete(id);
+                });
+                if (statusEl) {
+                    statusEl.textContent = `Loaded ${inventoryItems.length} drone(s)`;
+                }
+                updateInventoryList();
+            } catch (e) {
+                if (statusEl) {
+                    statusEl.textContent = `Inventory error: ${e.message}`;
+                }
+            }
+        }
+
+        function updateInventoryList() {
+            const list = document.getElementById('inventoryList');
+            if (!list) return;
+            if (!inventoryItems.length) {
+                list.innerHTML = '<div style="color: #aaa; text-align: center; padding: 20px;">No inventory found</div>';
+                return;
+            }
+
+            let html = '';
+            inventoryItems.forEach(item => {
+                const battery = item.battery_pct;
+                const batteryClass = battery == null ? '' : (battery > 70 ? 'battery-high' : battery > 40 ? 'battery-mid' : 'battery-low');
+                const statusClass = item.status === 'ACTIVE' ? 'status-active' : 'status-disabled';
+                const role = item.current_role || 'UNKNOWN';
+                const roleColor = ROLE_COLORS[role] || '#00d4ff';
+                const roleOptions = ROLE_OPTIONS.map(r => `<option value="${r}" ${role === r ? 'selected' : ''}>${r}</option>`).join('');
+                const roleSelectId = `role-${item.drone_id}`;
+                const checked = selectedDrones.has(item.drone_id) ? 'checked' : '';
+
+                html += `
+                    <div class="inventory-item" style="border-left-color: ${roleColor};">
+                        <div class="inventory-row">
+                            <div>
+                                <div class="drone-id">${item.drone_id}</div>
+                                <div class="drone-role" style="color: ${roleColor};">${role}</div>
+                            </div>
+                            <div>
+                                <span class="drone-battery ${batteryClass}">${battery != null ? battery.toFixed(0) + '%' : 'n/a'}</span>
+                                <span class="drone-status ${statusClass}">${item.status || 'UNKNOWN'}</span>
+                            </div>
+                        </div>
+                        <div class="inventory-row">
+                            <label style="display:flex; align-items:center; gap:6px; font-size:11px;">
+                                <input type="checkbox" ${checked} onchange="toggleDroneSelection('${item.drone_id}', this.checked)" />
+                                Select
+                            </label>
+                            <span style="font-size:11px; color:#aaa;">Last seen: ${item.last_seen ? new Date(item.last_seen * 1000).toLocaleTimeString() : 'n/a'}</span>
+                        </div>
+                        <div class="inventory-row">
+                            <select class="inventory-select" id="${roleSelectId}">
+                                ${roleOptions}
+                            </select>
+                            <button class="drone-action-btn" onclick="setRole('${item.drone_id}')">SET ROLE</button>
+                        </div>
+                        <div class="inventory-actions">
+                            <button class="drone-action-btn" onclick="holdDrone('${item.drone_id}')">HOLD</button>
+                            <button class="drone-action-btn" onclick="returnDrone('${item.drone_id}')">RTB</button>
+                            ${item.status === 'ACTIVE' ?
+                                `<button class="drone-action-btn" onclick="disableDrone('${item.drone_id}')">LAND</button>` :
+                                `<button class="drone-action-btn" onclick="enableDrone('${item.drone_id}')">ENABLE</button>`
+                            }
+                        </div>
+                    </div>
+                `;
+            });
+            list.innerHTML = html;
+        }
+
+        async function setRole(droneId) {
+            const selectEl = document.getElementById(`role-${droneId}`);
+            const role = selectEl ? selectEl.value : null;
+            if (!role) return;
+            const response = await fetch('/api/command/set_role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ drone_id: droneId, role })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                alert('Set role failed: ' + (data.error || 'unknown error'));
+            }
+        }
+
+        function toggleDroneSelection(droneId, selected) {
+            if (selected) {
+                selectedDrones.add(droneId);
+            } else {
+                selectedDrones.delete(droneId);
+            }
+        }
+
+        function selectAllInventory() {
+            inventoryItems.forEach(item => selectedDrones.add(item.drone_id));
+            updateInventoryList();
+        }
+
+        function clearSelectedInventory() {
+            selectedDrones.clear();
+            updateInventoryList();
+        }
+
+        function applyRoleToSelected() {
+            const bulkRole = document.getElementById('bulkRole')?.value;
+            if (!bulkRole) return;
+            selectedDrones.forEach(droneId => {
+                const select = document.getElementById(`role-${droneId}`);
+                if (select) select.value = bulkRole;
+            });
+        }
+
+        async function assignSelectedToMission() {
+            const mission = document.querySelector('input[name="mission"]:checked')?.value;
+            if (!mission) {
+                alert('Please select a mission first');
+                return;
+            }
+            const droneIds = Array.from(selectedDrones);
+            if (!droneIds.length) {
+                alert('Select at least one drone');
+                return;
+            }
+
+            const roleMap = {};
+            droneIds.forEach(id => {
+                const select = document.getElementById(`role-${id}`);
+                if (select && select.value) {
+                    roleMap[id] = select.value;
+                }
+            });
+
+            await fetch('/api/select-mission', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mission_type: mission,
+                    drone_count: droneIds.length,
+                    team_type: document.getElementById('teamType').value
+                })
+            });
+
+            const response = await fetch('/api/mission/assign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mission_type: mission,
+                    drone_ids: droneIds,
+                    role_map: roleMap
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                alert('Assign failed: ' + (data.error || 'unknown error'));
+            }
         }
 
         // ===== LEADER STATUS =====
@@ -1285,6 +1556,79 @@
             console.log('Configuration applied:', data);
         }
 
+        function buildMissionWaypoints(mission) {
+            const addTakeoff = (list) => {
+                if (!list.length) return list;
+                const first = list[0];
+                return [
+                    { lat: first.lat, lon: first.lon, alt_m: first.alt_m, command: 22 },
+                    ...list
+                ];
+            };
+            if (mission === 'PATROL') {
+                return addTakeoff([
+                    { lat: 28.6139, lon: 77.2090, alt_m: 50.0 },
+                    { lat: 28.6200, lon: 77.2150, alt_m: 50.0 },
+                    { lat: 28.6180, lon: 77.2200, alt_m: 50.0 },
+                    { lat: 28.6100, lon: 77.2080, alt_m: 50.0 },
+                ]);
+            }
+            if (mission === 'ESCORT') {
+                return addTakeoff([
+                    { lat: 28.6139, lon: 77.2090, alt_m: 40.0 },
+                    { lat: 28.6180, lon: 77.2140, alt_m: 40.0 },
+                    { lat: 28.6160, lon: 77.2180, alt_m: 40.0 },
+                ]);
+            }
+            if (mission === 'PERIMETER_GUARD') {
+                const center = { lat: 28.6139, lon: 77.2090 };
+                const radius = 0.005;
+                const waypoints = [];
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i * 2 * Math.PI) / 6;
+                    waypoints.push({
+                        lat: center.lat + radius * Math.cos(angle),
+                        lon: center.lon + radius * Math.sin(angle),
+                        alt_m: 50.0
+                    });
+                }
+                return addTakeoff(waypoints);
+            }
+            return [];
+        }
+
+        async function planMission() {
+            const mission = document.querySelector('input[name="mission"]:checked')?.value;
+            if (!mission) {
+                alert('Please select a mission first');
+                return;
+            }
+            const droneIds = Array.from(selectedDrones);
+            if (!droneIds.length) {
+                alert('Select at least one drone in Inventory');
+                return;
+            }
+            const waypoints = buildMissionWaypoints(mission);
+            if (!waypoints.length) {
+                alert('No waypoints defined for this mission');
+                return;
+            }
+
+            const response = await fetch('/api/mission/plan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mission_type: mission,
+                    drone_ids: droneIds,
+                    waypoints
+                })
+            });
+            const data = await response.json();
+            if (!response.ok) {
+                alert('Plan mission failed: ' + (data.error || 'unknown error'));
+            }
+        }
+
         // ===== COMMAND HANDLERS =====
         async function sendCommand(command, droneId) {
             let endpoint;
@@ -1311,20 +1655,23 @@
         }
 
         function holdAllDrones() {
-            Object.keys(droneStates).forEach(droneId => {
+            const targets = selectedDrones.size ? Array.from(selectedDrones) : Object.keys(droneStates);
+            targets.forEach(droneId => {
                 sendCommand('HOLD', droneId);
             });
         }
 
         function returnAllToDrone() {
-            Object.keys(droneStates).forEach(droneId => {
+            const targets = selectedDrones.size ? Array.from(selectedDrones) : Object.keys(droneStates);
+            targets.forEach(droneId => {
                 sendCommand('RETURN', droneId);
             });
         }
 
         function disableAllDrones() {
             if (confirm('⚠️ EMERGENCY LAND - Disable all drones?')) {
-                Object.keys(droneStates).forEach(droneId => {
+                const targets = selectedDrones.size ? Array.from(selectedDrones) : Object.keys(droneStates);
+                targets.forEach(droneId => {
                     sendCommand('DISABLE', droneId);
                 });
             }
@@ -1379,6 +1726,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             initializeMap();
             initializeChart();
+            removeActiveDronesPanel();
+            populateBulkRoleOptions();
+            loadInventory();
+            setInterval(loadInventory, 5000);
             console.log('🎮 Dashboard initialized');
         });
     </script>

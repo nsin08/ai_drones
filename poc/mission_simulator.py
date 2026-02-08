@@ -20,7 +20,7 @@ class DroneState:
     """Drone state for mission simulation."""
     drone_id: str
     mission_type: str  # PATROL, ESCORT, PERIMETER_GUARD
-    mission_role: str  # LEADER, WINGMAN, POINT_MAN, SCOUT, RELAY
+    mission_role: str  # LEADER, WINGMAN, POINT_MAN, SCOUT, RELAY, GUARD, CARGO
     lat: float
     lon: float
     altitude_m: float
@@ -98,8 +98,8 @@ class MissionSimulator:
                 print(f"\n🏠 Command received: RETURN TO BASE {drone_id}")
                 drone.mode = 'RTL'  # Return to launch
                 # Start moving drone back to base
-                drone.latitude = 28.6139
-                drone.longitude = 77.2090
+                drone.lat = 28.6139
+                drone.lon = 77.2090
                 self._publish_status(drone)
                 
                 # Send acknowledgment
@@ -112,6 +112,16 @@ class MissionSimulator:
                 
                 # Send acknowledgment
                 self._publish_command_ack(cmd_id, drone_id, command, 'SUCCESS')
+            
+            elif command == 'SET_ROLE':
+                new_role = command_data.get('role')
+                if new_role:
+                    print(f"\nðŸ§­ Command received: SET_ROLE {drone_id} -> {new_role}")
+                    drone.mission_role = new_role
+                    self._publish_status(drone)
+                    self._publish_command_ack(cmd_id, drone_id, command, 'SUCCESS')
+                else:
+                    self._publish_command_ack(cmd_id, drone_id, command, 'FAILED')
                 
         except Exception as e:
             print(f"Error processing command: {e}")

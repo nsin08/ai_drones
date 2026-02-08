@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mission Planner</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f4f4f4; }
+    .status { font-weight: bold; }
+    .toolbar { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; }
+    .error { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>Mission Planner</h1>
+  <div class="toolbar">
+    <button onclick="loadInventory()">Refresh Inventory</button>
+    <span id="error" class="error"></span>
+  </div>
+  <table id="inventory-table">
+    <thead>
+      <tr>
+        <th>Drone ID</th>
+        <th>Status</th>
+        <th>Battery</th>
+        <th>Position</th>
+        <th>Role</th>
+        <th>Assign</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    const roles = ["LEADER","POINT_MAN","WINGMAN","SCOUT","RELAY","GUARD","CARGO"];
+
+    function renderRow(drone) {
+      const tr = document.createElement("tr");
+
+      const pos = drone.position || {};
+      const posText = (pos.lat != null)
+        ? `${pos.lat.toFixed(5)}, ${pos.lon.toFixed(5)}, ${pos.alt_m?.toFixed?.(1) ?? pos.alt_m}`
+        : "n/a";
+
+      tr.innerHTML = `
+        <td>${drone.drone_id}</td>
+        <td class="status">${drone.status || "UNKNOWN"}</td>
+        <td>${drone.battery_pct != null ? drone.battery_pct.toFixed(1) + "%" : "n/a"}</td>
+        <td>${posText}</td>
+        <td>
+          <select>
+            ${roles.map(r => `<option value="${r}" ${drone.current_role === r ? "selected" : ""}>${r}</option>`).join("")}
+          </select>
+        </td>
+        <td><button>Assign</button></td>
+      `;
+
+      const select = tr.querySelector("select");
+      const button = tr.querySelector("button");
+      button.addEventListener("click", async () => {
+        await assignRole(drone.drone_id, select.value);
+      });
+
+      return tr;
+    }
+
+    async function assignRole(droneId, role) {
+      document.getElementById("error").textContent = "";
+      try {
+        const res = await fetch("/api/command/set_role", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ drone_id: droneId, role })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Failed to assign role");
+        }
+      } catch (e) {
+        document.getElementById("error").textContent = e.message;
+      }
+    }
+
+    async function loadInventory() {
+      document.getElementById("error").textContent = "";
+      const tbody = document.querySelector("#inventory-table tbody");
+      tbody.innerHTML = "";
+      try {
+        const res = await fetch("/api/inventory");
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || "Failed to fetch inventory");
+        }
+        const items = await res.json();
+        items.forEach(drone => tbody.appendChild(renderRow(drone)));
+      } catch (e) {
+        document.getElementById("error").textContent = e.message;
+      }
+    }
+
+    loadInventory();
+  </script>
+</body>
+</html>

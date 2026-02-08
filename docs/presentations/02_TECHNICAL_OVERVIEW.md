@@ -161,7 +161,7 @@ This document provides a technical deep-dive into our drone fleet operations pla
 
 **Our Topic Design**:
 
-**Namespace note**: You may see two topic roots in this repo: `fleet/...` (POC + ops stack; used in this document suite) and `ai_drones/...` (a minimal integration demo). Treat the prefix as a configuration choice; the message contracts and safety gates are what matter.
+**Namespace note**: This repo uses `fleet/...` as the canonical topic root (PoC + ops stack + integration demo).
 
 ```
 fleet/PATROL-01/telemetry      ← Drone publishes telemetry (e.g., 2Hz)

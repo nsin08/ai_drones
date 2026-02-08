@@ -79,6 +79,12 @@ cd poc
 python demo.py --broker mqtt
 ```
 
+## Mission Planner (Inventory + Role Assignment)
+
+If you start the ops stack with inventory enabled, you can open:
+
+- `http://localhost:5000/planner` (role assignment UI)
+
 ## Expected Output
 
 ```
