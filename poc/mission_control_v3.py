@@ -39,8 +39,11 @@ ACK_TIMEOUT_SEC = int(os.getenv("ACK_TIMEOUT_SEC", "10"))
 START_ACK_TIMEOUT_SEC = int(os.getenv("START_ACK_TIMEOUT_SEC", "5"))
 STALE_SEC = int(os.getenv("STALE_SEC", "30"))
 DISABLE_MQTT = os.getenv("DISABLE_MQTT", "0") == "1"
+HOME_BASE_LAT = float(os.getenv("HOME_BASE_LAT", "28.6139"))
+HOME_BASE_LON = float(os.getenv("HOME_BASE_LON", "77.2090"))
+HOME_BASE_ALT = float(os.getenv("HOME_BASE_ALT", "0"))
 
-VALID_COMMANDS = {"hold", "return", "disable", "enable", "arm", "disarm", "set_role", "land", "clear_mission"}
+VALID_COMMANDS = {"hold", "return", "disable", "enable", "arm", "disarm", "set_role", "land", "clear_mission", "resume"}
 VALID_MISSIONS = {"PATROL", "ESCORT", "PERIMETER"}
 
 # ---------------------------------------------------------------------------
@@ -68,6 +71,9 @@ leader_history = []
 # Event log (ring buffer)
 events = []
 MAX_EVENTS = 200
+
+# Home base
+home_base = {"lat": HOME_BASE_LAT, "lon": HOME_BASE_LON, "alt_m": HOME_BASE_ALT}
 
 
 def _emit_event(etype, message, **extra):
@@ -293,7 +299,12 @@ def on_mqtt_message(client, userdata, msg):
         elif "command_ack" in topic:
             _resolve_ack(payload)
         elif "system/event" in topic:
-            _emit_event(payload.get("type", "INFO"), payload.get("message", "Event"), **payload)
+            etype = payload.get("type", "INFO")
+            msg = payload.get("message", "Event")
+            extra = dict(payload)
+            extra.pop("type", None)
+            extra.pop("message", None)
+            _emit_event(etype, msg, **extra)
         elif "status" in topic:
             socketio.emit('status_update', payload)
     except Exception as e:
@@ -448,6 +459,30 @@ def get_missions():
     })
 
 
+@app.route('/api/home_base', methods=['GET', 'POST'])
+def home_base_endpoint():
+    """Get or set home base. POST publishes to MQTT for SwarmSim."""
+    global home_base
+    if request.method == 'GET':
+        return jsonify(home_base)
+
+    data = request.json or {}
+    lat = data.get("lat", home_base.get("lat"))
+    lon = data.get("lon", home_base.get("lon"))
+    alt_m = data.get("alt_m", home_base.get("alt_m", 0))
+    reset = bool(data.get("reset", True))
+    home_base = {"lat": float(lat), "lon": float(lon), "alt_m": float(alt_m)}
+
+    payload = {"lat": home_base["lat"], "lon": home_base["lon"], "alt_m": home_base["alt_m"], "reset": reset}
+    try:
+        mqtt_client.publish("fleet/system/home_base", json.dumps(payload))
+    except Exception:
+        pass
+
+    _emit_event("INFO", f"Home base set: {home_base['lat']:.5f}, {home_base['lon']:.5f}")
+    return jsonify(home_base)
+
+
 @app.route('/api/mission/assign', methods=['POST'])
 def assign_mission():
     """Assign drones + roles to a mission. Transitions IDLE -> PLANNING."""
@@ -544,6 +579,27 @@ def start_mission():
 
     # Send UPLOAD_MISSION to each assigned drone
     cmd_ids = []
+    # Determine spawn point (first waypoint / geofence / asset_route)
+    spawn_point = None
+    if mission_plan.get("waypoints"):
+        wp0 = mission_plan["waypoints"][0]
+        if isinstance(wp0, dict):
+            spawn_point = {"lat": wp0.get("lat"), "lon": wp0.get("lon"), "alt_m": wp0.get("alt_m", 0)}
+        else:
+            spawn_point = {"lat": wp0[0], "lon": wp0[1], "alt_m": 0}
+    elif mission_plan.get("geofence"):
+        gp0 = mission_plan["geofence"][0]
+        if isinstance(gp0, dict):
+            spawn_point = {"lat": gp0.get("lat"), "lon": gp0.get("lon"), "alt_m": gp0.get("alt_m", 0)}
+        else:
+            spawn_point = {"lat": gp0[0], "lon": gp0[1], "alt_m": 0}
+    elif mission_plan.get("asset_route"):
+        ap0 = mission_plan["asset_route"][0]
+        if isinstance(ap0, dict):
+            spawn_point = {"lat": ap0.get("lat"), "lon": ap0.get("lon"), "alt_m": ap0.get("alt_m", 0)}
+        else:
+            spawn_point = {"lat": ap0[0], "lon": ap0[1], "alt_m": 0}
+
     for did, role in mission_assignments.items():
         cmd = _send_command("UPLOAD_MISSION", did, extras={
             "mission_id": mission_id,
@@ -553,6 +609,8 @@ def start_mission():
             "asset_route": mission_plan.get("asset_route", []),
             "formation": mission_plan.get("formation", "BOX"),
             "role": role,
+            "start_from_first_wp": True,
+            "spawn_point": spawn_point,
         })
         cmd_ids.append(cmd["cmd_id"])
 
@@ -712,6 +770,9 @@ def single_command(verb):
     if verb_lower in ("hold", "return", "land"):
         if mission_assignments.get(drone_id) == "LEADER" and mission_state == "ACTIVE":
             _set_mission_state("PAUSED", f"Leader {drone_id} {verb_lower} - formation break")
+    if verb_lower == "resume":
+        if mission_assignments.get(drone_id) == "LEADER" and mission_state == "PAUSED":
+            _set_mission_state("ACTIVE", f"Leader {drone_id} resumed")
 
     return jsonify({"cmd_id": cmd["cmd_id"], "status": "REQUESTED"})
 
@@ -743,6 +804,11 @@ def bulk_command(verb):
         for did in drone_ids:
             if mission_assignments.get(did) == "LEADER" and mission_state == "ACTIVE":
                 _set_mission_state("PAUSED", f"Leader {did} {verb_lower} - formation break (bulk)")
+                break
+    if verb_lower == "resume" and mission_state == "PAUSED":
+        for did in drone_ids:
+            if mission_assignments.get(did) == "LEADER":
+                _set_mission_state("ACTIVE", f"Leader {did} resumed (bulk)")
                 break
 
     return jsonify({
@@ -783,6 +849,7 @@ def state_snapshot():
             "plan": mission_plan,
             "assignments": mission_assignments,
         },
+        "home_base": home_base,
         "drones": roster,
         "items": roster,
         "commands": recent_cmds[-50:],

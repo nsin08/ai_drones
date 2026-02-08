@@ -7,6 +7,8 @@ export const useMissionStore = create((set) => ({
   availableMissions: ['PATROL', 'PERIMETER', 'ESCORT'],
   missionConfig: {},
   droneCount: 0,
+  homeBase: { lat: 28.6139, lon: 77.209, alt_m: 0 },
+  selectingHomeBase: false,
 
   // Planning state
   planWaypoints: [],       // [{lat,lon,alt_m}]
@@ -17,6 +19,8 @@ export const useMissionStore = create((set) => ({
   setMissionType: (t) => set({ missionType: t, missionState: 'PLANNING' }),
   setMissionState: (s) => set({ missionState: s }),
   setMissionId: (id) => set({ missionId: id }),
+  setHomeBase: (hb) => set({ homeBase: hb }),
+  setSelectingHomeBase: (v) => set({ selectingHomeBase: v }),
 
   setMissionInfo: (data) =>
     set((prev) => ({

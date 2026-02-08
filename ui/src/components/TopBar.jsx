@@ -13,8 +13,9 @@ export default function TopBar() {
   const drones = useFleetStore((s) => s.drones);
   const { missionType, missionState } = useMissionStore();
   const showConfirm = useUIStore((s) => s.showConfirm);
-  const count = Object.keys(drones).length;
-  const active = Object.values(drones).filter((d) => d.status === 'ACTIVE').length;
+  const showDrones = ['ACTIVE', 'PAUSED', 'ABORTED', 'COMPLETED'].includes(missionState);
+  const count = showDrones ? Object.keys(drones).length : 0;
+  const active = showDrones ? Object.values(drones).filter((d) => d.status === 'ACTIVE').length : 0;
 
   const handlePause = async () => {
     try {

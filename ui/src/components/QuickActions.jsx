@@ -8,14 +8,16 @@ import { useFleetStore } from '../stores/fleetStore';
 import { useState } from 'react';
 
 export default function QuickActions() {
-  const selectedIds = useSelectionStore((s) => s.ids);
+  const selected = useSelectionStore((s) => s.selected);
   const showConfirm = useUIStore((s) => s.showConfirm);
   const missionState = useMissionStore((s) => s.missionState);
   const drones = useFleetStore((s) => s.drones);
+  const [applyAll, setApplyAll] = useState(false);
   const [newLeader, setNewLeader] = useState('');
 
   const dispatch = (cmd, extra = {}) => {
-    const ids = selectedIds();
+    const allIds = Object.values(drones).map((d) => d.drone_id);
+    const ids = applyAll ? allIds : [...selected];
     if (!ids.length) return alert('Select drones first');
 
     const isBulk = ids.length > 1;
@@ -64,12 +66,28 @@ export default function QuickActions() {
   return (
     <div className="panel-section">
       <div className="panel-section__title">Quick Actions</div>
+      <div className="qa-target">
+        <span>Target:</span>
+        <button
+          className={`qa-target-btn ${!applyAll ? 'qa-target-btn--active' : ''}`}
+          onClick={() => setApplyAll(false)}
+        >
+          Selected ({selected.size})
+        </button>
+        <button
+          className={`qa-target-btn ${applyAll ? 'qa-target-btn--active' : ''}`}
+          onClick={() => setApplyAll(true)}
+        >
+          Swarm ({Object.values(drones).length})
+        </button>
+      </div>
       <div className="quick-actions">
         <button className="qa-btn qa-btn--hold" onClick={() => dispatch('HOLD')}>HOLD</button>
         <button className="qa-btn qa-btn--return" onClick={() => dispatch('RETURN')}>RETURN</button>
         <button className="qa-btn qa-btn--disable" onClick={() => dispatch('DISABLE')}>DISABLE</button>
         <button className="qa-btn qa-btn--enable" onClick={() => dispatch('ENABLE')}>ENABLE</button>
         <button className="qa-btn qa-btn--arm" onClick={() => dispatch('ARM')}>ARM</button>
+        <button className="qa-btn qa-btn--enable" onClick={() => dispatch('RESUME')}>RESUME</button>
       </div>
 
       {/* Leader reassign (shown when PAUSED) */}

@@ -30,9 +30,9 @@ MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 SIM_FAIL_RATE = float(os.getenv("SIM_FAIL_RATE", "0.02"))  # 2% ACK failure
 TELEMETRY_HZ = 1.0
-BASE_LAT = 28.6139
-BASE_LON = 77.2090
-BASE_ALT = 50.0  # metres
+BASE_LAT = float(os.getenv("HOME_BASE_LAT", "28.6139"))
+BASE_LON = float(os.getenv("HOME_BASE_LON", "77.2090"))
+BASE_ALT = float(os.getenv("HOME_BASE_ALT", "50.0"))  # metres
 
 FORMATION_OFFSETS = {
     "LEADER":    (0, 0),
@@ -55,25 +55,29 @@ DEFAULT_ROLES = [
 # Drone model
 # ---------------------------------------------------------------------------
 class SimDrone:
-    def __init__(self, idx, role, total_drones):
+    def __init__(self, idx, role, total_drones, base_lat, base_lon, base_alt):
         self.drone_id = f"SIM-{idx:03d}"
         self.role = role
         self.status = "ACTIVE"
         self.mode = "AUTO"
         self.armed = True
         self.battery = random.uniform(85, 95)
-        self.altitude = BASE_ALT + random.uniform(-2, 2)
-        self.speed = random.uniform(8, 12)  # m/s
+        self.altitude = base_alt + random.uniform(-2, 2)
+        self.cruise_speed = random.uniform(8, 12)  # m/s
+        self.speed = self.cruise_speed
         self.heading = 0.0
         self.gps_fix = 3
         self.satellites = random.randint(10, 16)
 
         # Position offsets (in metres, converted to lat/lon)
+        self.base_lat = base_lat
+        self.base_lon = base_lon
+        self.base_alt = base_alt
         off = FORMATION_OFFSETS.get(role, (0, 0))
         lat_off = off[1] / 111_320               # ~1 deg = 111.32 km
-        lon_off = off[0] / (111_320 * math.cos(math.radians(BASE_LAT)))
-        self.lat = BASE_LAT + lat_off
-        self.lon = BASE_LON + lon_off
+        lon_off = off[0] / (111_320 * math.cos(math.radians(base_lat)))
+        self.lat = base_lat + lat_off
+        self.lon = base_lon + lon_off
 
         # Patrol waypoint index
         self.wp_idx = 0
@@ -104,9 +108,11 @@ class SimDrone:
 
         if self.returning:
             self.mode = "RTL"
+            if self.speed <= 0:
+                self.speed = self.cruise_speed
             # Move towards base
-            self._move_toward(BASE_LAT, BASE_LON, dt)
-            dist = self._distance(BASE_LAT, BASE_LON)
+            self._move_toward(self.base_lat, self.base_lon, dt)
+            dist = self._distance(self.base_lat, self.base_lon)
             if dist < 5:
                 self.returning = False
                 self.mode = "LANDED"
@@ -115,6 +121,8 @@ class SimDrone:
 
         # Normal flight: follow waypoints with formation offset
         self.mode = "AUTO"
+        if self.speed <= 0:
+            self.speed = self.cruise_speed
         wps = self.waypoints or waypoints
         if wps:
             if self.role == "LEADER":
@@ -150,6 +158,38 @@ class SimDrone:
     def _distance(self, target_lat, target_lon):
         return math.sqrt((target_lat - self.lat) ** 2 + (target_lon - self.lon) ** 2) * 111_320
 
+    def set_home_base(self, lat, lon, alt_m, reset=False):
+        self.base_lat = lat
+        self.base_lon = lon
+        self.base_alt = alt_m
+        if reset:
+            off = FORMATION_OFFSETS.get(self.role, (0, 0))
+            lat_off = off[1] / 111_320
+            lon_off = off[0] / (111_320 * math.cos(math.radians(lat)))
+            self.lat = lat + lat_off
+            self.lon = lon + lon_off
+            self.altitude = alt_m + random.uniform(-2, 2)
+            self.speed = self.cruise_speed
+            self.wp_idx = 0
+            self.hold = False
+            self.returning = False
+            self.disabled = False
+            self.mode = "AUTO"
+
+    def set_spawn(self, lat, lon, alt_m):
+        off = FORMATION_OFFSETS.get(self.role, (0, 0))
+        lat_off = off[1] / 111_320
+        lon_off = off[0] / (111_320 * math.cos(math.radians(lat)))
+        self.lat = lat + lat_off
+        self.lon = lon + lon_off
+        self.altitude = alt_m + random.uniform(-2, 2)
+        self.speed = self.cruise_speed
+        self.wp_idx = 0
+        self.hold = False
+        self.returning = False
+        self.disabled = False
+        self.mode = "AUTO"
+
     def telemetry(self):
         return {
             "drone_id": self.drone_id,
@@ -180,13 +220,18 @@ class SwarmSimulator:
         self.drones: dict[str, SimDrone] = {}
         self.running = False
         self._lock = threading.Lock()
+        self.base_lat = BASE_LAT
+        self.base_lon = BASE_LON
+        self.base_alt = BASE_ALT
+        self.mission_active = False
+        self.awaiting_start_release = False
 
         # Default patrol waypoints (square around base)
         self.waypoints = [
-            (BASE_LAT + 0.002, BASE_LON),
-            (BASE_LAT + 0.002, BASE_LON + 0.002),
-            (BASE_LAT, BASE_LON + 0.002),
-            (BASE_LAT, BASE_LON),
+            (self.base_lat + 0.002, self.base_lon),
+            (self.base_lat + 0.002, self.base_lon + 0.002),
+            (self.base_lat, self.base_lon + 0.002),
+            (self.base_lat, self.base_lon),
         ]
 
         # MQTT
@@ -199,21 +244,29 @@ class SwarmSimulator:
         # Create drones
         for i in range(self.num_drones):
             role = DEFAULT_ROLES[i % len(DEFAULT_ROLES)]
-            d = SimDrone(i + 1, role, self.num_drones)
+            d = SimDrone(i + 1, role, self.num_drones, self.base_lat, self.base_lon, self.base_alt)
             self.drones[d.drone_id] = d
 
     def _on_connect(self, client, userdata, flags, rc, properties=None):
         print(f"SwarmSim MQTT connected (rc={rc})")
         # Subscribe to commands; filter SIM- in handler
         client.subscribe("fleet/+/command")
+        client.subscribe("fleet/system/home_base")
 
     def _on_message(self, client, userdata, msg):
         """Handle incoming commands from Mission Control."""
         try:
             payload = json.loads(msg.payload.decode())
+            if msg.topic == "fleet/system/home_base":
+                self._set_home_base(payload)
+                return
             drone_id = payload.get("drone_id")
             command = payload.get("command", "").upper()
             cmd_id = payload.get("cmd_id")
+
+            if command == "UPLOAD_MISSION":
+                self.mission_active = True
+                self.awaiting_start_release = True
 
             if drone_id not in self.drones:
                 return
@@ -231,6 +284,12 @@ class SwarmSimulator:
         if not drone:
             return
 
+        start_from_first_wp = False
+        spawn_point = None
+        if command == "UPLOAD_MISSION":
+            start_from_first_wp = bool(payload.get("start_from_first_wp", False))
+            spawn_point = payload.get("spawn_point") or None
+
         # Simulate occasional failure
         if random.random() < SIM_FAIL_RATE:
             result = "FAILED"
@@ -243,6 +302,12 @@ class SwarmSimulator:
                 elif command == "RETURN":
                     drone.returning = True
                     drone.hold = False
+                elif command == "RESUME":
+                    drone.hold = False
+                    drone.returning = False
+                    drone.disabled = False
+                    drone.mode = "AUTO"
+                    drone.speed = drone.cruise_speed
                 elif command == "DISABLE":
                     drone.disabled = True
                     drone.status = "DISABLED"
@@ -250,6 +315,7 @@ class SwarmSimulator:
                     drone.disabled = False
                     drone.status = "ACTIVE"
                     drone.mode = "AUTO"
+                    drone.speed = drone.cruise_speed
                 elif command == "ARM":
                     drone.armed = True
                 elif command == "DISARM":
@@ -285,10 +351,44 @@ class SwarmSimulator:
                         route = [(p["lat"], p["lon"]) if isinstance(p, dict) else (p[0], p[1]) for p in asset_route]
                         drone.waypoints = route
                         self.waypoints = route
+
+                    if start_from_first_wp:
+                        if spawn_point and spawn_point.get("lat") is not None and spawn_point.get("lon") is not None:
+                            sp_lat = float(spawn_point.get("lat"))
+                            sp_lon = float(spawn_point.get("lon"))
+                            sp_alt = float(spawn_point.get("alt_m", self.base_alt))
+                        elif wps:
+                            sp = wps[0]
+                            sp_lat = sp.get("lat") if isinstance(sp, dict) else sp[0]
+                            sp_lon = sp.get("lon") if isinstance(sp, dict) else sp[1]
+                            sp_alt = sp.get("alt_m", self.base_alt) if isinstance(sp, dict) else self.base_alt
+                        elif geofence:
+                            gp = geofence[0]
+                            sp_lat = gp.get("lat") if isinstance(gp, dict) else gp[0]
+                            sp_lon = gp.get("lon") if isinstance(gp, dict) else gp[1]
+                            sp_alt = gp.get("alt_m", self.base_alt) if isinstance(gp, dict) else self.base_alt
+                        elif asset_route:
+                            ap = asset_route[0]
+                            sp_lat = ap.get("lat") if isinstance(ap, dict) else ap[0]
+                            sp_lon = ap.get("lon") if isinstance(ap, dict) else ap[1]
+                            sp_alt = ap.get("alt_m", self.base_alt) if isinstance(ap, dict) else self.base_alt
+                        else:
+                            sp_lat = self.base_lat
+                            sp_lon = self.base_lon
+                            sp_alt = self.base_alt
+                        for d in self.drones.values():
+                            d.set_spawn(sp_lat, sp_lon, sp_alt)
+
                     drone.hold = False
                     drone.returning = False
                     drone.disabled = False
                     drone.mode = "AUTO"
+                elif command == "CLEAR_MISSION":
+                    drone.waypoints = []
+                    drone.hold = True
+                    drone.returning = False
+                    self.mission_active = False
+                    self.awaiting_start_release = False
                 elif command == "LAND":
                     drone.mode = "LAND"
                     drone.armed = False
@@ -311,7 +411,28 @@ class SwarmSimulator:
         for d in self.drones.values():
             if d.role == "LEADER" and d.status == "ACTIVE":
                 return (d.lat, d.lon)
-        return (BASE_LAT, BASE_LON)
+        return (self.base_lat, self.base_lon)
+
+    def _set_home_base(self, payload):
+        try:
+            lat = float(payload.get("lat", self.base_lat))
+            lon = float(payload.get("lon", self.base_lon))
+            alt_m = float(payload.get("alt_m", self.base_alt))
+            reset = bool(payload.get("reset", False))
+        except Exception:
+            return
+        with self._lock:
+            self.base_lat = lat
+            self.base_lon = lon
+            self.base_alt = alt_m
+            self.waypoints = [
+                (self.base_lat + 0.002, self.base_lon),
+                (self.base_lat + 0.002, self.base_lon + 0.002),
+                (self.base_lat, self.base_lon + 0.002),
+                (self.base_lat, self.base_lon),
+            ]
+            for d in self.drones.values():
+                d.set_home_base(lat, lon, alt_m, reset=reset)
 
     def run(self):
         """Main simulation loop."""
@@ -341,6 +462,16 @@ class SwarmSimulator:
                 leader_pos = self._get_leader_pos()
 
                 with self._lock:
+                    if not self.mission_active:
+                        for d in self.drones.values():
+                            d.hold = True
+                    elif self.awaiting_start_release:
+                        for d in self.drones.values():
+                            if d.disabled or d.returning:
+                                continue
+                            d.hold = False
+                        self.awaiting_start_release = False
+
                     for d in self.drones.values():
                         d.tick(interval, self.waypoints, leader_pos)
 

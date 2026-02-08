@@ -12,6 +12,13 @@ export const fetchDrone = (id) =>
 /* -- Missions -- */
 export const fetchMissions = () => api.get('/missions').then((r) => r.data);
 
+/* -- Home Base -- */
+export const fetchHomeBase = () =>
+  api.get('/home_base').then((r) => r.data);
+
+export const setHomeBase = (body) =>
+  api.post('/home_base', body).then((r) => r.data);
+
 export const assignMission = (body) =>
   api.post('/mission/assign', body).then((r) => r.data);
 

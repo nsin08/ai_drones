@@ -4,11 +4,12 @@ import { MISSION_TYPES } from '../constants';
 import { assignMission, planMission, startMission, resetMission } from '../api';
 
 export default function MissionSetup() {
-  const { missionType, missionState, planWaypoints, planGeofence, planAssetRoute, planFormation } = useMissionStore();
+  const { missionType, missionState, planWaypoints, planGeofence, planAssetRoute, planFormation, homeBase, selectingHomeBase } = useMissionStore();
   const setType = useMissionStore((s) => s.setMissionType);
   const setId = useMissionStore((s) => s.setMissionId);
   const resetPlan = useMissionStore((s) => s.resetPlan);
   const setFormation = useMissionStore((s) => s.setPlanFormation);
+  const setSelectingHomeBase = useMissionStore((s) => s.setSelectingHomeBase);
   const selectedIds = useSelectionStore((s) => s.ids);
 
   const handlePlan = async () => {
@@ -68,6 +69,16 @@ export default function MissionSetup() {
   return (
     <div className="panel-section">
       <div className="panel-section__title">Mission Setup</div>
+
+      <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+        Home Base: {homeBase?.lat?.toFixed(5)}, {homeBase?.lon?.toFixed(5)}
+        <button
+          style={{ marginLeft: 6, fontSize: '0.65rem', color: 'var(--accent-cyan)' }}
+          onClick={() => setSelectingHomeBase(!selectingHomeBase)}
+        >
+          {selectingHomeBase ? 'Click map to set...' : 'Set Home Base'}
+        </button>
+      </div>
 
       <div className="mission-type-btns">
         {MISSION_TYPES.map((t) => (

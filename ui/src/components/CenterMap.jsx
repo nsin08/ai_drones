@@ -1,10 +1,11 @@
-import { useMemo, useRef, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, useMapEvents } from 'react-leaflet';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, Polygon, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useFleetStore } from '../stores/fleetStore';
 import { useMissionStore } from '../stores/missionStore';
 import { useSelectionStore } from '../stores/selectionStore';
 import { TILE_URL, MAP_CENTER, MAP_ZOOM, ROLE_COLORS } from '../constants';
+import { setHomeBase as setHomeBaseApi } from '../api';
 
 /* -- SVG marker icon factory -- */
 function droneIcon(color = '#22d3ee', mode = 'AUTO') {
@@ -23,14 +24,27 @@ function droneIcon(color = '#22d3ee', mode = 'AUTO') {
 
 /* -- Click-to-add handler for mission planning -- */
 function MapClickHandler() {
-  const { missionType, missionState } = useMissionStore();
+  const { missionType, missionState, selectingHomeBase } = useMissionStore();
   const addWp = useMissionStore((s) => s.addPlanWaypoint);
   const { planGeofence, setPlanGeofence, planAssetRoute, setPlanAssetRoute } = useMissionStore();
+  const setHomeBase = useMissionStore((s) => s.setHomeBase);
+  const setSelectingHomeBase = useMissionStore((s) => s.setSelectingHomeBase);
 
   useMapEvents({
-    click(e) {
-      if (missionState !== 'PLANNING') return;
+    async click(e) {
       const { lat, lng: lon } = e.latlng;
+      if (selectingHomeBase) {
+        const hb = { lat: +lat.toFixed(6), lon: +lon.toFixed(6), alt_m: 0 };
+        setHomeBase(hb);
+        setSelectingHomeBase(false);
+        try {
+          await setHomeBaseApi({ ...hb, reset: true });
+        } catch (err) {
+          console.warn('Failed to set home base', err);
+        }
+        return;
+      }
+      if (missionState !== 'PLANNING') return;
       if (missionType === 'PATROL') {
         addWp({ lat: +lat.toFixed(6), lon: +lon.toFixed(6), alt_m: 50 });
       } else if (missionType === 'PERIMETER') {
@@ -43,10 +57,23 @@ function MapClickHandler() {
   return null;
 }
 
+function MapViewUpdater({ homeBase }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!homeBase) return;
+    const { lat, lon } = homeBase;
+    if (lat != null && lon != null) {
+      map.setView([lat, lon], map.getZoom(), { animate: false });
+    }
+  }, [map, homeBase?.lat, homeBase?.lon]);
+  return null;
+}
+
 export default function CenterMap() {
   const drones = useFleetStore((s) => s.drones);
-  const { missionType, planWaypoints, planGeofence, planAssetRoute } = useMissionStore();
+  const { missionType, missionState, planWaypoints, planGeofence, planAssetRoute, homeBase } = useMissionStore();
   const toggle = useSelectionStore((s) => s.toggle);
+  const showDrones = ['ACTIVE', 'PAUSED', 'ABORTED', 'COMPLETED'].includes(missionState);
   const tileSources = useMemo(() => ([
     TILE_URL,
     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -78,10 +105,31 @@ export default function CenterMap() {
             },
           }}
         />
+        <MapViewUpdater homeBase={homeBase} />
         <MapClickHandler />
 
+        {/* Home base marker */}
+        {homeBase?.lat != null && homeBase?.lon != null && (
+          <Marker
+            position={[homeBase.lat, homeBase.lon]}
+            icon={L.divIcon({
+              html: `<div style="color:#fbbf24;font-size:18px;text-shadow:0 0 3px #000;">★</div>`,
+              className: '',
+              iconSize: [18, 18],
+              iconAnchor: [9, 9],
+            })}
+          >
+            <Popup>
+              <div style={{ fontSize: '0.75rem', lineHeight: 1.4 }}>
+                <b>Home Base</b><br />
+                {homeBase.lat.toFixed(5)}, {homeBase.lon.toFixed(5)}
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
         {/* Drone markers */}
-        {Object.values(drones).map((d) => {
+        {showDrones && Object.values(drones).map((d) => {
           if (d.latitude == null || d.longitude == null) return null;
           const role = d.mission_role || d.current_role || 'UNKNOWN';
           const color = ROLE_COLORS[role] || ROLE_COLORS.UNKNOWN;
@@ -93,7 +141,7 @@ export default function CenterMap() {
               eventHandlers={{ click: () => toggle(d.drone_id) }}
             >
               <Popup>
-                <div style={{ fontSize: '0.75rem', color: '#333', lineHeight: 1.5 }}>
+                <div style={{ fontSize: '0.75rem', lineHeight: 1.5 }}>
                   <b>{d.drone_id}</b> - {role}<br />
                   Battery: {(d.battery_pct ?? 0).toFixed(1)}%<br />
                   Mode: {d.mode || 'UNKNOWN'}<br />
@@ -105,7 +153,7 @@ export default function CenterMap() {
         })}
 
         {/* Trails */}
-        {Object.values(drones).map((d) => {
+        {showDrones && Object.values(drones).map((d) => {
           if (!d.trail || d.trail.length < 2) return null;
           const role = d.mission_role || d.current_role || 'UNKNOWN';
           const color = ROLE_COLORS[role] || ROLE_COLORS.UNKNOWN;

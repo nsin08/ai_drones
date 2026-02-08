@@ -49,4 +49,6 @@ ul, ol { list-style: none; }
   border-radius: 6px !important;
   font-size: 0.75rem;
 }
+.leaflet-popup-content { color: var(--text-primary) !important; }
+.leaflet-popup-content b { color: var(--text-primary) !important; }
 .leaflet-popup-tip { background: var(--bg-card) !important; }

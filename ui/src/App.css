@@ -30,6 +30,8 @@
   border-bottom: 1px solid var(--border);
   gap: 16px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 20;
 }
 .topbar__title { font-weight: 700; font-size: 0.95rem; color: var(--accent-cyan); }
 .topbar__stat { font-size: 0.75rem; color: var(--text-secondary); }
@@ -55,6 +57,8 @@
   flex-direction: column;
   overflow-y: auto;
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 .panel-section { padding: 10px 12px; border-bottom: 1px solid var(--border); }
 .panel-section__title {
@@ -71,10 +75,12 @@
   flex-direction: column;
   overflow-y: auto;
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
 }
 
 /* -- Center Map -- */
-.center-map { flex: 1; position: relative; min-height: 0; }
+.center-map { flex: 1; position: relative; min-height: 0; z-index: 1; }
 .center-map .leaflet-container { height: 100%; width: 100%; }
 
 /* -- Bottom Strip -- */
@@ -85,6 +91,8 @@
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  position: relative;
+  z-index: 5;
 }
 .bottom-tabs {
   display: flex;
@@ -98,7 +106,7 @@
 .bottom-tab--active {
   color: var(--accent-cyan); border-bottom-color: var(--accent-cyan);
 }
-.bottom-chart { flex: 1; overflow: auto; padding: 6px 10px; }
+.bottom-chart { flex: 1; overflow: hidden; padding: 6px 10px; min-height: 120px; min-width: 0; }
 
 /* -- Fleet Roster -- */
 .roster-list { list-style: none; }
@@ -139,6 +147,17 @@
 
 /* -- Quick Actions -- */
 .quick-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.qa-target {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+  font-size: 0.68rem; color: var(--text-muted);
+}
+.qa-target-btn {
+  padding: 2px 8px; border-radius: 9999px; font-size: 0.65rem;
+  border: 1px solid var(--border); color: var(--text-secondary);
+}
+.qa-target-btn--active {
+  background: var(--accent-cyan); color: #000; border-color: var(--accent-cyan);
+}
 .qa-btn {
   padding: 5px 10px; border-radius: 4px; font-size: 0.72rem;
   font-weight: 600; color: #fff; transition: opacity 0.15s;

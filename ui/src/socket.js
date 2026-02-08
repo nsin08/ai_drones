@@ -3,7 +3,7 @@ import { useFleetStore } from './stores/fleetStore';
 import { useCommandStore } from './stores/commandStore';
 import { useMissionStore } from './stores/missionStore';
 import { useEventStore } from './stores/eventStore';
-import { fetchInventory, fetchMissions, fetchSnapshot } from './api';
+import { fetchInventory, fetchMissions, fetchSnapshot, fetchHomeBase } from './api';
 
 let socket = null;
 
@@ -21,22 +21,25 @@ export function getSocket() {
       useEventStore.getState().addEvent({ type: 'SYSTEM', message: 'Connected to Mission Control' });
       // Reconnection strategy per API contract (section 4)
       try {
-        const [inv, mis, snap] = await Promise.all([
+        const [inv, mis, snap, hb] = await Promise.all([
           fetchInventory(),
           fetchMissions(),
           fetchSnapshot().catch(() => null),
+          fetchHomeBase().catch(() => null),
         ]);
         const invList = inv?.items || inv?.drones || [];
         if (invList.length) {
           invList.forEach((d) => useFleetStore.getState().upsertDrone(d));
         }
         if (mis) useMissionStore.getState().setMissionInfo(mis);
+        if (hb) useMissionStore.getState().setHomeBase(hb);
         if (snap) {
           const snapList = snap.items || snap.drones || [];
           if (snapList.length) snapList.forEach((d) => useFleetStore.getState().upsertDrone(d));
           if (snap.commands) snap.commands.forEach((c) => useCommandStore.getState().upsertCommand(c));
           if (snap.events) snap.events.forEach((e) => useEventStore.getState().addEvent(e));
           if (snap.mission) useMissionStore.getState().setMissionInfo(snap.mission);
+          if (snap.home_base) useMissionStore.getState().setHomeBase(snap.home_base);
         }
       } catch (e) {
         console.warn('[WS] reconnect fetch failed', e);
@@ -64,6 +67,9 @@ export function getSocket() {
 
     socket.on('mission_changed', (data) => {
       useMissionStore.getState().setMissionInfo(data);
+      if (data.mission_state === 'ACTIVE') {
+        useFleetStore.getState().resetTrails();
+      }
       useEventStore.getState().addEvent({
         type: 'MISSION',
         message: `Mission -> ${data.mission_state || data.mission_type}`,

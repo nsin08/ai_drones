@@ -81,3 +81,17 @@ def test_state_snapshot_includes_items(mc):
     data = resp.get_json()
     assert "items" in data
     assert any(d["drone_id"] == "SIM-001" for d in data["items"])
+
+
+def test_home_base_endpoint(mc):
+    client = mc.app.test_client()
+    resp = client.get("/api/home_base")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "lat" in data and "lon" in data
+
+    resp2 = client.post("/api/home_base", json={"lat": 1.1, "lon": 2.2, "alt_m": 3, "reset": True})
+    assert resp2.status_code == 200
+    data2 = resp2.get_json()
+    assert data2["lat"] == 1.1
+    assert data2["lon"] == 2.2

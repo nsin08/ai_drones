@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useFleetStore } from '../stores/fleetStore';
 import { useEventStore } from '../stores/eventStore';
+import { useMissionStore } from '../stores/missionStore';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   BarChart, Bar, Cell,
 } from 'recharts';
 import { ROLE_COLORS } from '../constants';
@@ -12,7 +13,7 @@ const TABS = ['Altitude', 'Battery', 'Events'];
 /* ------------------------------------------------------------------ */
 /* AltitudeChart                                                       */
 /* ------------------------------------------------------------------ */
-function AltitudeChart({ drones }) {
+function AltitudeChart({ drones, width, height }) {
   const series = Object.values(drones).map((d) => ({
     name: d.drone_id,
     data: d.trail?.map((pt, i) => ({ t: i, alt: pt.alt ?? d.altitude_m ?? d.altitude ?? 0 })) || [],
@@ -31,24 +32,22 @@ function AltitudeChart({ drones }) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <LineChart data={merged} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-        <XAxis dataKey="t" tick={{ fontSize: 10, fill: '#888' }} />
-        <YAxis tick={{ fontSize: 10, fill: '#888' }} domain={['auto', 'auto']} />
-        <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', fontSize: 11 }} />
-        {series.map((s) => (
-          <Line key={s.name} type="monotone" dataKey={s.name} stroke={s.color} dot={false} strokeWidth={1.5} />
-        ))}
-      </LineChart>
-    </ResponsiveContainer>
+    <LineChart width={width} height={height} data={merged} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+      <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+      <XAxis dataKey="t" tick={{ fontSize: 10, fill: '#888' }} />
+      <YAxis tick={{ fontSize: 10, fill: '#888' }} domain={['auto', 'auto']} />
+      <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', fontSize: 11 }} />
+      {series.map((s) => (
+        <Line key={s.name} type="monotone" dataKey={s.name} stroke={s.color} dot={false} strokeWidth={1.5} />
+      ))}
+    </LineChart>
   );
 }
 
 /* ------------------------------------------------------------------ */
 /* BatteryChart                                                        */
 /* ------------------------------------------------------------------ */
-function BatteryChart({ drones }) {
+function BatteryChart({ drones, width, height }) {
   const data = Object.values(drones)
     .sort((a, b) => a.drone_id.localeCompare(b.drone_id))
     .map((d) => ({
@@ -60,17 +59,15 @@ function BatteryChart({ drones }) {
   if (!data.length) return <Empty msg="No telemetry yet" />;
 
   return (
-    <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#333" />
-        <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#888' }} />
-        <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#888' }} />
-        <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', fontSize: 11 }} />
-        <Bar dataKey="battery" radius={[4, 4, 0, 0]}>
-          {data.map((d, i) => <Cell key={i} fill={d.color} />)}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <BarChart width={width} height={height} data={data} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+      <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+      <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#888' }} />
+      <YAxis domain={[0, 100]} tick={{ fontSize: 10, fill: '#888' }} />
+      <Tooltip contentStyle={{ background: '#1e293b', border: '1px solid #334155', fontSize: 11 }} />
+      <Bar dataKey="battery" radius={[4, 4, 0, 0]}>
+        {data.map((d, i) => <Cell key={i} fill={d.color} />)}
+      </Bar>
+    </BarChart>
   );
 }
 
@@ -113,12 +110,39 @@ function Empty({ msg }) {
   );
 }
 
+function ChartShell({ children }) {
+  const ref = useRef(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  useLayoutEffect(() => {
+    if (!ref.current) return undefined;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setSize({ w: Math.floor(width), h: Math.floor(height) });
+        }
+      }
+    });
+    ro.observe(ref.current);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} style={{ width: '100%', height: '100%' }}>
+      {size.w > 0 && size.h > 0 ? children(size) : <Empty msg="Sizing chart..." />}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* BottomStrip                                                         */
 /* ------------------------------------------------------------------ */
 export default function BottomStrip() {
   const drones = useFleetStore((s) => s.drones);
+  const missionState = useMissionStore((s) => s.missionState);
   const [tab, setTab] = useState('Battery');
+  const showDrones = ['ACTIVE', 'PAUSED', 'ABORTED', 'COMPLETED'].includes(missionState);
 
   return (
     <div className="bottom-strip">
@@ -130,8 +154,17 @@ export default function BottomStrip() {
         ))}
       </div>
       <div className="bottom-chart">
-        {tab === 'Altitude' && <AltitudeChart drones={drones} />}
-        {tab === 'Battery' && <BatteryChart drones={drones} />}
+        {!showDrones && <Empty msg="Plan and start a mission to view telemetry" />}
+        {showDrones && tab === 'Altitude' && (
+          <ChartShell>
+            {(size) => <AltitudeChart drones={drones} width={size.w} height={size.h} />}
+          </ChartShell>
+        )}
+        {showDrones && tab === 'Battery' && (
+          <ChartShell>
+            {(size) => <BatteryChart drones={drones} width={size.w} height={size.h} />}
+          </ChartShell>
+        )}
         {tab === 'Events' && <EventTimeline />}
       </div>
     </div>

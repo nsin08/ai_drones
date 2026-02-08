@@ -18,7 +18,13 @@ export const useFleetStore = create((set, get) => ({
       const lon = data.longitude ?? data.lon ?? position.lon ?? prev.longitude;
       const alt = data.altitude_m ?? data.altitude ?? position.alt_m ?? prev.altitude_m ?? prev.altitude;
       if (lat != null && lon != null) {
-        trail.push({ lat, lon, alt });
+        const last = trail[trail.length - 1];
+        const dLat = last ? Math.abs(lat - last.lat) : 1;
+        const dLon = last ? Math.abs(lon - last.lon) : 1;
+        const moved = (dLat + dLon) > 0.00002; // ~2m
+        if (!last || moved) {
+          trail.push({ lat, lon, alt });
+        }
         if (trail.length > 100) trail.splice(0, trail.length - 100);
       }
       const battery_pct = data.battery_pct ?? data.battery ?? prev.battery_pct ?? prev.battery ?? 0;
@@ -49,6 +55,12 @@ export const useFleetStore = create((set, get) => ({
     }),
 
   clearAll: () => set({ drones: {} }),
+  resetTrails: () =>
+    set((s) => ({
+      drones: Object.fromEntries(
+        Object.entries(s.drones).map(([id, d]) => [id, { ...d, trail: [] }]),
+      ),
+    })),
 
   /** Get sorted list */
   droneList: () => Object.values(get().drones).sort((a, b) => (a.drone_id > b.drone_id ? 1 : -1)),
