@@ -1,0 +1,52 @@
+/* V3 Mission Control - index.css */
+/* Theme vars and resets are in theme.css, imported via main.jsx */
+/* This file provides base element resets for the V3 dark UI */
+
+button {
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+}
+
+input, select, textarea {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  outline: none;
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent-cyan);
+}
+
+select {
+  cursor: pointer;
+}
+
+a {
+  color: var(--accent-cyan);
+  text-decoration: none;
+}
+a:hover { text-decoration: underline; }
+
+ul, ol { list-style: none; }
+
+/* Leaflet map dark filter */
+.leaflet-tile-pane { filter: brightness(0.7) contrast(1.1) saturate(0.8); }
+
+/* Leaflet popup override */
+.leaflet-popup-content-wrapper {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border-radius: 6px !important;
+  font-size: 0.75rem;
+}
+.leaflet-popup-tip { background: var(--bg-card) !important; }

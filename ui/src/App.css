@@ -1,0 +1,222 @@
+/* V3 App Shell Layout */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.app-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.app-center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* -- Top Bar -- */
+.topbar {
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  gap: 16px;
+  flex-shrink: 0;
+}
+.topbar__title { font-weight: 700; font-size: 0.95rem; color: var(--accent-cyan); }
+.topbar__stat { font-size: 0.75rem; color: var(--text-secondary); }
+.topbar__stat b { color: var(--text-primary); }
+.topbar__actions { margin-left: auto; display: flex; gap: 6px; }
+.topbar__btn {
+  padding: 4px 12px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+  text-transform: uppercase;
+}
+.topbar__btn--pause { background: var(--accent-amber); color: #000; }
+.topbar__btn--abort { background: var(--accent-red); color: #fff; }
+.topbar__state {
+  padding: 2px 10px; border-radius: 9999px; font-size: 0.65rem;
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+}
+
+/* -- Left Panel -- */
+.left-panel {
+  width: var(--panel-width-left);
+  background: var(--bg-panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+.panel-section { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.panel-section__title {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  color: var(--text-muted); margin-bottom: 8px; letter-spacing: 0.06em;
+}
+
+/* -- Right Panel -- */
+.right-panel {
+  width: var(--panel-width-right);
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+/* -- Center Map -- */
+.center-map { flex: 1; position: relative; min-height: 0; }
+.center-map .leaflet-container { height: 100%; width: 100%; }
+
+/* -- Bottom Strip -- */
+.bottom-strip {
+  height: var(--bottomstrip-height);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.bottom-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+.bottom-tab {
+  padding: 4px 14px; font-size: 0.7rem; background: none;
+  color: var(--text-muted); border-bottom: 2px solid transparent;
+}
+.bottom-tab--active {
+  color: var(--accent-cyan); border-bottom-color: var(--accent-cyan);
+}
+.bottom-chart { flex: 1; overflow: auto; padding: 6px 10px; }
+
+/* -- Fleet Roster -- */
+.roster-list { list-style: none; }
+.roster-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 6px; border-radius: 4px; cursor: pointer;
+  font-size: 0.78rem; transition: background 0.15s;
+}
+.roster-item:hover { background: var(--bg-hover); }
+.roster-item--selected { background: rgba(34, 211, 238, 0.12); }
+.roster-item__id { font-weight: 600; min-width: 60px; }
+.roster-item__bat { font-size: 0.7rem; }
+.roster-item__role {
+  font-size: 0.6rem; padding: 1px 6px; border-radius: 9999px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.roster-item__mode { font-size: 0.65rem; color: var(--text-muted); }
+.roster-item__chip {
+  font-size: 0.55rem; padding: 1px 5px; border-radius: 9999px;
+  background: var(--accent-amber); color: #000; font-weight: 700;
+}
+
+/* -- Command Queue -- */
+.command-row {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 6px; font-size: 0.72rem; border-bottom: 1px solid var(--border);
+}
+.command-status-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.command-verb { font-weight: 600; font-size: 0.7rem; }
+.command-target { color: var(--text-muted); font-size: 0.68rem; }
+.command-time { color: var(--text-muted); font-size: 0.6rem; margin-left: auto; }
+.late-ack-badge {
+  font-size: 0.55rem; padding: 1px 5px; border-radius: 9999px;
+  font-weight: 700; background: var(--accent-amber); color: #000;
+}
+
+/* -- Quick Actions -- */
+.quick-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.qa-btn {
+  padding: 5px 10px; border-radius: 4px; font-size: 0.72rem;
+  font-weight: 600; color: #fff; transition: opacity 0.15s;
+}
+.qa-btn:hover { opacity: 0.85; }
+.qa-btn--hold { background: var(--accent-amber); color: #000; }
+.qa-btn--return { background: var(--accent-orange); }
+.qa-btn--disable { background: var(--accent-red); }
+.qa-btn--enable { background: var(--accent-green); color: #000; }
+.qa-btn--arm { background: var(--accent-blue); }
+.qa-btn--role { background: var(--bg-card); border: 1px solid var(--border); color: var(--text-primary); }
+
+/* -- Mission Setup -- */
+.mission-type-btns { display: flex; gap: 6px; margin-bottom: 8px; }
+.mission-type-btn {
+  flex: 1; padding: 6px; border-radius: 4px; font-size: 0.72rem;
+  font-weight: 600; background: var(--bg-card); color: var(--text-secondary);
+  border: 1px solid var(--border); transition: all 0.15s;
+}
+.mission-type-btn--active {
+  background: var(--accent-cyan); color: #000;
+  border-color: var(--accent-cyan);
+}
+.mission-actions { display: flex; gap: 6px; margin-top: 8px; }
+.mission-btn {
+  flex: 1; padding: 6px; border-radius: 4px; font-size: 0.72rem;
+  font-weight: 600; color: #fff;
+}
+.mission-btn--plan { background: var(--accent-blue); }
+.mission-btn--start { background: var(--accent-green); color: #000; }
+.mission-btn--abort { background: var(--accent-red); }
+
+/* -- Waypoint table -- */
+.wp-table { width: 100%; font-size: 0.7rem; border-collapse: collapse; }
+.wp-table th {
+  text-align: left; color: var(--text-muted); font-weight: 600;
+  padding: 2px 4px; font-size: 0.6rem;
+}
+.wp-table td { padding: 2px 4px; }
+.wp-table input { width: 70px; font-size: 0.68rem; padding: 2px 4px; }
+.wp-del { background: none; color: var(--accent-red); font-size: 0.8rem; cursor: pointer; }
+
+/* -- Confirm Dialog -- */
+.confirm-overlay {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.6); display: flex;
+  align-items: center; justify-content: center;
+}
+.confirm-dialog {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 20px; min-width: 340px; max-width: 420px;
+}
+.confirm-title { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+.confirm-body { font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 14px; }
+.confirm-drones {
+  font-size: 0.72rem; color: var(--text-muted); margin-bottom: 14px;
+}
+.confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.confirm-btn {
+  padding: 6px 18px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;
+}
+.confirm-btn--cancel { background: var(--bg-hover); color: var(--text-primary); }
+.confirm-btn--ok { background: var(--accent-red); color: #fff; }
+
+/* -- Event Timeline -- */
+.event-row {
+  padding: 2px 0; font-size: 0.7rem; display: flex; gap: 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.event-time { color: var(--text-muted); font-size: 0.6rem; min-width: 55px; }
+.event-type {
+  font-size: 0.55rem; padding: 1px 5px; border-radius: 9999px;
+  font-weight: 700; text-transform: uppercase;
+}
+.event-type--INFO { background: var(--accent-blue); color: #fff; }
+.event-type--WARN { background: var(--accent-amber); color: #000; }
+.event-type--ERROR { background: var(--accent-red); color: #fff; }
+.event-type--CMD { background: var(--accent-cyan); color: #000; }
+.event-msg { flex: 1; }
+.filters-row { display: flex; gap: 4px; margin-bottom: 6px; }
+.filters-row input, .filters-row select { flex: 1; font-size: 0.7rem; }
