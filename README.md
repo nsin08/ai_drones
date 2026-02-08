@@ -1,63 +1,317 @@
-# Drone Fleet Ops MVP (MQTT + Mission Control + Fault Models)
+# Drone Fleet Ops MVP (MQTT + Mission Control V3 + SwarmSim)
 
-**Last reviewed:** February 1, 2026
+**Last reviewed:** February 8, 2026
 
-This repo contains a **no-hardware** MVP/PoC for drone fleet operations concepts:
+This repo contains a **production-ready V3 Mission Control system** for drone fleet operations:
 
-- A **fault-model PoC** built with **TDD + hexagonal architecture** (`poc/src/domain/*` + tests).
-- A minimal **Mission Control UI** (`poc/mission_control.py`) to visualize and command a simulated fleet over MQTT.
-- An **integration demo** (`integration/demo_mqtt.py`) that uses the `fleet/...` namespace for MQTT testing.
-- A **presentation suite** for technical + executive audiences (`docs/presentations/00_INDEX.md`).
+- **Mission Control V3** — Flask backend + React + Vite SPA with real-time telemetry, command/ACK tracking, mission state machine
+- **SwarmSim** — Virtual drone fleet simulator (10-17 drones) with formation offsets, battery drain, simulated latency
+- **MQTT-based architecture** — Publish/subscribe for telemetry, commands, and ACKs
+- **Hybrid fleet support** — Seamless integration with ArduPilot SITL (Phase 2) or real hardware (Edge Agent, Phase 2)
 
-## What you can demo (today)
+## Quick Start (Minimal Script-Based, Recommended for Development)
 
-- **Fault models** (PoC): RF loss bursts, GNSS multipath, EKF unhealthy, thrust shortfall, battery sag.
-- **Fleet telemetry loop**: simulated drones publish to MQTT (`fleet/...`), mission control subscribes and renders in a browser.
-- **Command/ACK flow**: mission control publishes `fleet/{id}/command`, companion/sim publishes `fleet/system/command_ack`.
+**Prerequisites:** Docker (for MQTT broker), Python 3.11+
 
-## Repo map (key)
+### Terminal 1: Start MQTT Broker (Docker)
+```powershell
+cd ops
+docker compose up mosquitto -d
+# Broker runs on localhost:1883
+```
 
-- `docs/presentations/00_INDEX.md` — start here for the full presentation suite.
-- `poc/` — PoC domain models + tests + `mission_simulator.py` + `mission_control.py`.
-- `integration/` — MQTT integration demo using the `fleet/...` topic prefix.
-- `ops/` — local stack via Docker Compose (Mosquitto + InfluxDB + Grafana + Telegraf).
-- `.context/` — working notes, plans, and draft docs (not required to run the PoC).
+### Terminal 2: Start Mission Control V3 (Backend + UI)
+```powershell
+cd poc
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python mission_control_v3.py
+# API: http://localhost:5000/api
+# SPA: http://localhost:5000
+```
 
-## Quick start (Windows)
+### Terminal 3: Start SwarmSim (Virtual Fleet)
+```powershell
+cd swarmsim
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python swarmsim.py --drones 12 --broker localhost --port 1883
+# 12 virtual drones (SIM-001 to SIM-012) at 1 Hz telemetry
+```
 
-1) Start infrastructure:
-   - `cd ops`
-   - `docker compose up -d`
+### Open Browser
+```
+http://localhost:5000/
+```
 
-2) Run PoC tests:
-   - `cd ..\\poc`
-   - `python -m venv .venv`
-   - `.venv\\Scripts\\activate`
-   - `pip install -r requirements.txt`
-   - `pytest tests\\unit -q`
+**Expected:**
+- ✓ Dark theme UI loads (React + Leaflet map)
+- ✓ 12 drones appear in FleetRoster with roles (LEADER, WINGMAN, SCOUT, etc.)
+- ✓ Map shows drone markers + home base (star icon)
+- ✓ Real-time altitude/battery charts
+- ✓ Command queue (empty until mission starts)
 
-3) Optional: run Mission Control + simulator (uses `fleet/...` topics):
-   - Terminal A: `python mission_simulator.py`
-   - Terminal B: `python mission_control.py` then open `http://localhost:5000`
+---
 
-## Inventory + Drone Containers (ArduPilot SITL)
+## Full Demo Scenario (15-20 minutes)
 
-The ops stack now includes a **drone inventory service** and a **compose-scaled drone service**.
+See [.context/project/docs/24_v3_demo_runbook.md](.context/project/docs/24_v3_demo_runbook.md) for:
+- **Phase 1:** System startup & fleet discovery
+- **Phase 2:** PERIMETER mission planning & execution
+- **Phase 3:** Formation break & leader reassignment
+- **Phase 4:** Bulk commands & mission abort
+- **Troubleshooting checklist**
 
-1) Start ops stack (includes inventory + Mission Control):
-   - `cd ops`
-   - `docker compose up -d`
+---
 
-2) Start multiple drone containers:
-   - `docker compose up -d --scale drone=3`
+## Full Docker Setup (With Observability + SITL)
 
-3) View inventory:
-   - `http://localhost:8001/inventory`
+**Includes:** InfluxDB, Grafana dashboards, ArduPilot SITL containers, inventory service
 
-4) Open the Mission Planner UI:
-   - `http://localhost:5000/planner`
+### Start All Services
+```powershell
+cd ops
+docker compose up -d
+docker compose up -d --scale drone=3
+# Services: Mosquitto, InfluxDB, Grafana, Mission Control V3, SwarmSim, Inventory, 3 SITL Drones
+```
 
-## Topic namespaces (important)
+### Access Points
+| Service | URL |
+|---------|-----|
+| **Mission Control V3** | http://localhost:5000 |
+| **Inventory (Drone Roster)** | http://localhost:8001/inventory |
+| **Grafana (Dashboards)** | http://localhost:3000 (admin/admin) |
+| **MQTT Broker** | localhost:1883 |
+| **InfluxDB API** | http://localhost:8086 |
 
-- `fleet/...` — used by the PoC mission simulator + mission control + ops ingestion (`ops/telegraf.conf`).
-- `fleet/...` — used by `integration/demo_mqtt.py` (quick MQTT demo pattern).
+### Hybrid Fleet (SwarmSim + SITL)
+- **SwarmSim drones:** SIM-001 to SIM-012 (virtual, always on)
+- **SITL drones:** SITL-001 to SITL-003 (ArduPilot containers)
+- **Total:** 15 drones visible in Fleet Roster
+
+---
+
+## Architecture
+
+### System Components
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Browser (React + Vite SPA)           │
+│  - Dark theme UI with real-time telemetry visualization │
+│  - Mission planner (PATROL, PERIMETER, ESCORT)          │
+│  - Command queue with ACK/timeout tracking              │
+│  - Event timeline + charts                              │
+└────────────────┬────────────────────────────────────────┘
+                 │ WebSocket (Socket.IO)
+                 ↓
+┌────────────────────────────────────────────────────────┐
+│         Mission Control V3 (Flask + SocketIO)          │
+│  - REST API: /api/mission/*, /api/command/*            │
+│  - Mission FSM: IDLE→PLANNING→PLANNED→ACTIVE→PAUSED    │
+│  - Command timeout tracking (10s)                       │
+│  - Bulk command dispatch with cmd_group_id             │
+│  - Formation break detection                            │
+└────────┬──────────────────────────────┬────────────────┘
+         │ MQTT Pub/Sub                 │ Telemetry fetch
+         ↓                              ↓
+┌────────────────────────────────────────────────────────┐
+│                 MQTT Broker (Mosquitto)                │
+│  Topics:                                               │
+│  - fleet/{id}/telemetry (1 Hz per drone)              │
+│  - fleet/{id}/command (command dispatch)              │
+│  - fleet/system/command_ack (ACK from drones)         │
+│  - fleet/system/event (formation alerts)              │
+└────┬────────────────────────────────────┬─────────────┘
+     │                                    │
+     ↓ MQTT Subscribe                     ↓ MQTT Subscribe
+┌──────────────────────┐          ┌─────────────────────┐
+│  SwarmSim            │          │  Inventory Service  │
+│  (Virtual Fleet)     │          │  (SITL Bridge)      │
+│  - 10-17 drones      │          │  - MAVLink ↔ MQTT   │
+│  - 1 Hz telemetry    │          │  - Auto-discovery   │
+│  - Formation offsets │          │  - Health tracking  │
+│  - Battery drain     │          │  - 3+ SITL drones   │
+│  - ACK simulation    │          │                     │
+└──────────────────────┘          └─────────────────────┘
+```
+
+### Drone ID Namespacing
+- `SIM-###` — SwarmSim virtual drones
+- `SITL-###` — ArduPilot SITL containers
+- `HW-###` — Real hardware (Edge Agent, Phase 2)
+
+---
+
+## File Organization
+
+```
+ai_drones/
+├── poc/
+│   ├── mission_control_v3.py     (V3 backend: 890 lines)
+│   ├── requirements.txt
+│   ├── Dockerfile
+│   ├── src/
+│   │   ├── adapters/
+│   │   ├── domain/
+│   │   └── ports/
+│   └── tests/
+├── swarmsim/
+│   ├── swarmsim.py               (Virtual fleet: 546 lines)
+│   ├── requirements.txt
+│   └── Dockerfile
+├── ui/
+│   ├── src/
+│   │   ├── components/           (14 components)
+│   │   ├── stores/               (Zustand state)
+│   │   ├── App.jsx, main.jsx
+│   │   └── App.css, theme.css
+│   ├── dist/                     (Production build)
+│   ├── package.json
+│   └── vite.config.js
+├── ops/
+│   ├── docker-compose.yml        (7 services)
+│   ├── mosquitto.conf
+│   ├── telegraf.conf
+│   └── grafana/
+├── inventory/
+│   ├── app.py                    (FastAPI)
+│   └── Dockerfile
+├── docs/
+│   ├── presentations/            (Executive + technical)
+│   └── V3_DEMO_QUICKSTART.md
+└── .context/
+    ├── project/docs/
+    │   ├── 17_v3_implementation_plan.md
+    │   ├── 18_v3_ui_spec.md
+    │   ├── 19_v3_api_contract.md
+    │   ├── 20_v3_mission_planning_protocol.md
+    │   ├── 21_v3_command_state_machine.md
+    │   ├── 22_v3_swarm_behavior.md
+    │   └── 24_v3_demo_runbook.md
+```
+
+---
+
+## Key Features (V3)
+
+### Mission State Machine
+```
+IDLE --[assign_mission]--> PLANNING --[plan_mission]--> PLANNED --[start_mission]--> ACTIVE
+                                                                                         ↓
+                                                                        [pause] ← PAUSED ←┤
+                                                                                         ↓
+                                                        [abort] → ABORTED / [completed] ← COMPLETED
+```
+
+### Command Lifecycle
+- `REQUESTED` — sent to drone
+- `ACKED` — drone confirmed within timeout
+- `TIMED_OUT` — no ACK after 10 seconds
+- `COMPLETED_LATE` — ACK arrived after timeout (tracked)
+
+### Formation Behavior
+- **Offsets per role:** LEADER (0,0), WINGMAN (±30m), SCOUT (60m), etc.
+- **Formation break:** Leader HOLD/RETURN/LAND → auto-pause mission
+- **Leader reassignment:** UI allows reassign + resume
+
+---
+
+## Development Setup
+
+### Build UI
+```powershell
+cd ui
+npm install
+npm run build
+# Output: dist/index.html + assets
+```
+
+### Run Tests (PoC domain models)
+```powershell
+cd poc
+python -m pytest tests/unit -q
+```
+
+### Code Quality
+```powershell
+cd ui
+npm run lint
+```
+
+---
+
+## Deployment
+
+### Local Production (Docker)
+```powershell
+cd ops
+docker compose -f docker-compose.yml up -d
+# All services auto-start on reboot (restart: unless-stopped)
+```
+
+### Cloud / VM
+- Push image to registry: `docker push my-registry/mission-control-v3`
+- Deploy via Kubernetes or Docker Swarm
+- Update MQTT broker address in env vars
+
+---
+
+## Hardware Path (Phase 2)
+
+To integrate real drones:
+
+1. **Edge Agent** (MAVLink serial/UDP → MQTT)
+2. **TLS MQTT** configuration
+3. **Inventory registry** (heartbeat-based discovery)
+
+No UI changes required — just swap MQTT topic namespace from `SIM-` → `HW-`.
+
+---
+
+## Troubleshooting
+
+### No drones appear in UI
+```powershell
+# 1. Check MQTT broker is running
+docker exec mosquitto mosquitto_sub -h localhost -t "fleet/+/telemetry" -C 1
+
+# 2. Check SwarmSim is connected
+# (Look for "MQTT connected (rc=0)" in terminal)
+
+# 3. Check Mission Control logs
+# (WebSocket should show "telemetry_update" messages)
+```
+
+### Commands timeout
+```powershell
+# Check SwarmSim received command
+# (Look for "[SIM-###] Processing command" in terminal)
+
+# Check ACK published to MQTT
+docker exec mosquitto mosquitto_sub -h localhost -t "fleet/system/command_ack" -C 1
+```
+
+### Build errors
+```powershell
+# Rebuild UI
+cd ui
+npm install
+npm run build
+
+# Verify dist/ exists with index.html
+ls dist/index.html
+```
+
+---
+
+## References
+
+- **Demo runbook:** [24_v3_demo_runbook.md](.context/project/docs/24_v3_demo_runbook.md)
+- **API contract:** [19_v3_api_contract.md](.context/project/docs/19_v3_api_contract.md)
+- **Presentations:** [docs/presentations/00_INDEX.md](docs/presentations/00_INDEX.md)
+- **Framework:** [GitHub: space_framework](https://github.com/nsin08/space_framework)
+
