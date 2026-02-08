@@ -225,6 +225,7 @@ class SwarmSimulator:
         self.base_alt = BASE_ALT
         self.mission_active = False
         self.awaiting_start_release = False
+        self.assigned_ids = set()
 
         # Default patrol waypoints (square around base)
         self.waypoints = [
@@ -267,6 +268,8 @@ class SwarmSimulator:
             if command == "UPLOAD_MISSION":
                 self.mission_active = True
                 self.awaiting_start_release = True
+                if drone_id:
+                    self.assigned_ids.add(drone_id)
 
             if drone_id not in self.drones:
                 return
@@ -322,9 +325,17 @@ class SwarmSimulator:
                     drone.armed = False
                     drone.mode = "DISARMED"
                 elif command == "SET_ROLE":
-                    drone.role = payload.get("role", drone.role)
+                    new_role = payload.get("role", drone.role)
+                    print(f"[{drone_id}] SET_ROLE: {drone.role} -> {new_role}")
+                    drone.role = new_role
                 elif command == "UPLOAD_MISSION":
                     # Accept waypoints / geofence / asset_route
+                    # Apply role if provided (mission start sends this)
+                    if "role" in payload:
+                        new_role = payload.get("role", drone.role)
+                        print(f"[{drone_id}] UPLOAD_MISSION role: {drone.role} -> {new_role}")
+                        drone.role = new_role
+                    
                     wps = payload.get("waypoints", [])
                     geofence = payload.get("geofence", [])
                     asset_route = payload.get("asset_route", [])
@@ -376,8 +387,9 @@ class SwarmSimulator:
                             sp_lat = self.base_lat
                             sp_lon = self.base_lon
                             sp_alt = self.base_alt
-                        for d in self.drones.values():
-                            d.set_spawn(sp_lat, sp_lon, sp_alt)
+                        for did, d in self.drones.items():
+                            if did in self.assigned_ids:
+                                d.set_spawn(sp_lat, sp_lon, sp_alt)
 
                     drone.hold = False
                     drone.returning = False
@@ -389,6 +401,7 @@ class SwarmSimulator:
                     drone.returning = False
                     self.mission_active = False
                     self.awaiting_start_release = False
+                    self.assigned_ids.clear()
                 elif command == "LAND":
                     drone.mode = "LAND"
                     drone.armed = False
@@ -466,13 +479,18 @@ class SwarmSimulator:
                         for d in self.drones.values():
                             d.hold = True
                     elif self.awaiting_start_release:
-                        for d in self.drones.values():
+                        for did, d in self.drones.items():
+                            if did not in self.assigned_ids:
+                                d.hold = True
+                                continue
                             if d.disabled or d.returning:
                                 continue
                             d.hold = False
                         self.awaiting_start_release = False
 
                     for d in self.drones.values():
+                        if self.mission_active and d.drone_id not in self.assigned_ids:
+                            continue
                         d.tick(interval, self.waypoints, leader_pos)
 
                 # Publish telemetry

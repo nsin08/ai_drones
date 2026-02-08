@@ -25,7 +25,12 @@ import socket as sock
 # ---------------------------------------------------------------------------
 # App + SocketIO
 # ---------------------------------------------------------------------------
-app = Flask(__name__, static_folder='../ui/dist', static_url_path='')
+# Support both local dev (../ui/dist) and Docker (ui/dist)
+UI_DIST = os.path.join(os.path.dirname(__file__), '..', 'ui', 'dist')
+if not os.path.exists(UI_DIST):
+    UI_DIST = os.path.join(os.path.dirname(__file__), 'ui', 'dist')
+
+app = Flask(__name__, static_folder=UI_DIST, static_url_path='')
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'v3-mission-control')
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 

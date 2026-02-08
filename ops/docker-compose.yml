@@ -103,7 +103,8 @@ services:
 
   mission-control:
     build:
-      context: ../poc
+      context: ..
+      dockerfile: poc/Dockerfile
     container_name: mission-control
     ports:
       - "5000:5000"

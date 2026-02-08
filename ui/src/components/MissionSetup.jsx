@@ -1,5 +1,6 @@
 import { useMissionStore } from '../stores/missionStore';
 import { useSelectionStore } from '../stores/selectionStore';
+import { useFleetStore } from '../stores/fleetStore';
 import { MISSION_TYPES } from '../constants';
 import { assignMission, planMission, startMission, resetMission } from '../api';
 
@@ -11,16 +12,21 @@ export default function MissionSetup() {
   const setFormation = useMissionStore((s) => s.setPlanFormation);
   const setSelectingHomeBase = useMissionStore((s) => s.setSelectingHomeBase);
   const selectedIds = useSelectionStore((s) => s.ids);
+  const drones = useFleetStore((s) => s.drones);
 
   const handlePlan = async () => {
     if (!missionType) return;
     const ids = selectedIds();
     if (!ids.length) return alert('Select drones first');
 
-    // Step 1: assign drones + roles
+    // Step 1: assign drones + roles (preserve existing roles from roster)
     try {
       const roleMap = {};
-      ids.forEach((id, i) => { roleMap[id] = i === 0 ? 'LEADER' : 'WINGMAN'; });
+      ids.forEach((id, i) => {
+        const currentRole = drones[id]?.mission_role || drones[id]?.current_role;
+        // Use existing role, or default to LEADER for first, WINGMAN for rest
+        roleMap[id] = currentRole || (i === 0 ? 'LEADER' : 'WINGMAN');
+      });
       const assignRes = await assignMission({ mission_type: missionType, drone_ids: ids, role_map: roleMap });
       if (assignRes.mission_id) setId(assignRes.mission_id);
     } catch (e) {

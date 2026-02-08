@@ -55,7 +55,7 @@
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
+  overflow: hidden;
   flex-shrink: 0;
   position: relative;
   z-index: 10;
