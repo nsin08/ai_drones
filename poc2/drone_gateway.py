@@ -408,16 +408,126 @@ def print_status(state, lock, drone_id, broker, hz, start_time):
     print("  Press Ctrl+C to stop gateway")
 
 
+# ─── DroneSession: wraps one port + one droneId ──────────────────────────────
+
+class DroneSession:
+    """Lifecycle for a single MAVLink port → MQTT publishing pair."""
+
+    def __init__(self, port, baud, drone_id, broker, mqtt_port, hz):
+        self.drone_id   = drone_id
+        self.port       = port
+        self.baud       = baud
+        self.state      = _empty_state()
+        self.lock       = threading.Lock()
+        self.start_time = None
+        self.connected  = False
+        self.proc = MavlinkProcessor(port, baud, self.state, self.lock)
+        self.pub  = MqttPublisher(broker, mqtt_port, drone_id, hz, self.state, self.lock)
+
+    def connect(self) -> bool:
+        if not self.proc.connect():
+            return False
+        if not self.pub.connect():
+            return False
+        self.connected  = True
+        self.start_time = time.time()
+        return True
+
+    def start_threads(self):
+        threading.Thread(
+            target=self.proc.run_forever, daemon=True,
+            name=f"mav-rx-{self.drone_id}").start()
+        threading.Thread(
+            target=self.pub.run_forever, daemon=True,
+            name=f"mqtt-pub-{self.drone_id}").start()
+
+
+# ─── Multi-drone console ──────────────────────────────────────────────────────
+
+def print_multi_status(sessions: list, broker: str, hz: float):
+    import os
+    os.system("cls" if os.name == "nt" else "clear")
+    now = datetime.now().strftime("%H:%M:%S")
+
+    print("╔══════════════════════════════════════════════════════════════╗")
+    print(f"║  AIP POC-2 · Multi-Drone Gateway  [{now}]                  ║")
+    print("╚══════════════════════════════════════════════════════════════╝")
+    print(f"  Broker: {broker}   Rate: {hz}Hz   Drones: {len(sessions)}")
+    print()
+
+    for s in sessions:
+        uptime = f"{time.time() - s.start_time:.0f}s" if s.start_time else "?"
+        with s.lock:
+            st   = dict(s.state)
+        armed = "🔴 ARMED" if st["armed"] else "🟢 DISARMED"
+        lat   = f"{st['latitude']:.6f}"  if st["latitude"]  else "?"
+        lon   = f"{st['longitude']:.6f}" if st["longitude"] else "?"
+        alt   = f"{st['altitude_m']:.1f}m" if st["altitude_m"] else "?"
+        v     = f"{st['voltage_v']:.2f}V" if st["voltage_v"] else "?"
+        pct   = f"{st['battery_pct']}%"
+        prearm = "✅" if st["prearm_ok"] else "❌"
+
+        print(f"  ┌─ {s.drone_id}  [{s.port} @{s.baud}]  Uptime: {uptime}  Msgs: {st['msg_count']}")
+        print(f"  │  {armed}   Mode: {st['mode']}   PreArm: {prearm}")
+        print(f"  │  Pos:  lat={lat}  lon={lon}  alt={alt}")
+        print(f"  │  Bat:  {v}  {pct}   GPS: fix={st['gps_fix']} sats={st['satellites_visible']}")
+        print(f"  │  EKF:  {'OK' if st['ekf_ok'] else 'FAIL'}   "
+              f"Vibe: x={st['vibe_x']} y={st['vibe_y']} z={st['vibe_z']}")
+        print(f"  └─ MQTT: fleet/{s.drone_id}/telemetry")
+        print()
+
+    print("  Press Ctrl+C to stop all gateways")
+
+
+# ─── Parse --ports argument ───────────────────────────────────────────────────
+
+def parse_ports_arg(ports_str: str) -> list:
+    """
+    Parse --ports COM6:HW-001,COM3:HW-002 into list of (port, drone_id) tuples.
+    Also supports just port names:  COM6,COM3  → (COM6, HW-001), (COM3, HW-002)
+    """
+    entries = [e.strip() for e in ports_str.split(",") if e.strip()]
+    result  = []
+    for i, entry in enumerate(entries):
+        if ":" in entry:
+            port, drone_id = entry.split(":", 1)
+        else:
+            port     = entry
+            drone_id = f"HW-{i+1:03d}"
+        result.append((port.strip(), drone_id.strip()))
+    return result
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
 def main():
-    parser = argparse.ArgumentParser(description="POC-2: MAVLink → MQTT drone gateway")
-    parser.add_argument("--port",     default=None,            help="COM port (auto-detect if omitted)")
-    parser.add_argument("--baud",     type=int, default=57600, help="Baud rate (default 57600)")
-    parser.add_argument("--drone-id", default=DEFAULT_DRONE_ID, help="MQTT drone ID (default HW-001)")
-    parser.add_argument("--broker",   default=DEFAULT_BROKER,   help="MQTT broker host (default localhost)")
-    parser.add_argument("--mqtt-port",type=int, default=DEFAULT_PORT_NUM, help="MQTT broker port (default 1883)")
-    parser.add_argument("--hz",       type=float, default=DEFAULT_HZ, help="Publish rate in Hz (default 1)")
+    parser = argparse.ArgumentParser(
+        description="POC-2: MAVLink → MQTT drone gateway (single or multi-port)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  Single drone (auto-detect):
+    python drone_gateway.py
+
+  Single drone (explicit):
+    python drone_gateway.py --port COM6 --baud 57600
+
+  Multi-drone (O5):
+    python drone_gateway.py --ports COM6:HW-001,COM3:HW-002
+    python drone_gateway.py --ports COM6,COM3,COM7
+        """
+    )
+    # Single-port args (backward compatible)
+    parser.add_argument("--port",      default=None,             help="COM port, single drone (auto-detect if omitted)")
+    parser.add_argument("--baud",      type=int, default=57600,  help="Baud rate (default 57600)")
+    parser.add_argument("--drone-id",  default=DEFAULT_DRONE_ID, help=f"MQTT drone ID, single mode (default {DEFAULT_DRONE_ID})")
+    # Multi-port args (O5)
+    parser.add_argument("--ports",     default=None,
+                        help="Multi-drone: COM6:HW-001,COM3:HW-002  (overrides --port/--drone-id)")
+    # Shared args
+    parser.add_argument("--broker",    default=DEFAULT_BROKER,    help=f"MQTT broker host (default {DEFAULT_BROKER})")
+    parser.add_argument("--mqtt-port", type=int, default=DEFAULT_PORT_NUM, help=f"MQTT broker port (default {DEFAULT_PORT_NUM})")
+    parser.add_argument("--hz",        type=float, default=DEFAULT_HZ,    help=f"Publish rate in Hz (default {DEFAULT_HZ})")
     args = parser.parse_args()
 
     print("╔══════════════════════════════════════════════════════════════╗")
@@ -428,46 +538,52 @@ def main():
     print("  ⚠️  Make sure Mission Planner is CLOSED (port conflict).")
     print()
 
-    state = _empty_state()
-    lock  = threading.Lock()
+    # ── Build port list ────────────────────────────────────────────────────────
+    if args.ports:
+        port_list = parse_ports_arg(args.ports)
+    else:
+        port_list = [(args.port, args.drone_id)]   # None port = auto-detect
 
-    # ── Step 1: MAVLink connect
-    print("  [1/2] Connecting to drone via MAVLink...")
-    proc = MavlinkProcessor(args.port, args.baud, state, lock)
-    if not proc.connect():
-        print()
-        print("❌  No heartbeat received.")
-        print("    • Drone powered ON?")
-        print("    • Mission Planner closed?")
-        print("    • Try:  --port COM6 --baud 57600  or  --port COM3")
+    sessions = []
+
+    for idx, (port, drone_id) in enumerate(port_list, 1):
+        label = port or "auto-detect"
+        print(f"  [{idx}/{len(port_list)}] Connecting {drone_id}  port={label}  baud={args.baud}...")
+        session = DroneSession(port, args.baud, drone_id, args.broker, args.mqtt_port, args.hz)
+        if not session.connect():
+            print(f"  ❌  {drone_id} ({label}) — no heartbeat received.")
+            print("      • Drone powered ON?")
+            print("      • Mission Planner closed?")
+            print(f"      • Try:  --port COM6  or  --port COM3  --baud {args.baud}")
+            if len(port_list) == 1:
+                sys.exit(1)
+            else:
+                print(f"      ⚠️  Skipping {drone_id}, continuing with remaining ports...")
+                continue
+        print(f"      ✅  {drone_id} connected  →  fleet/{drone_id}/telemetry")
+        sessions.append(session)
+
+    if not sessions:
+        print("\n❌  No drones connected. Exiting.")
         sys.exit(1)
 
-    # ── Step 2: MQTT connect
     print()
-    print(f"  [2/2] Connecting to MQTT broker at {args.broker}:{args.mqtt_port}...")
-    pub = MqttPublisher(args.broker, args.mqtt_port, args.drone_id, args.hz, state, lock)
-    if not pub.connect():
-        print()
-        print("❌  Could not reach MQTT broker.")
-        print("    • Is the broker running?  docker compose up -d  (from ops/)")
-        print(f"    • Or specify:  --broker <ip>  --mqtt-port {DEFAULT_PORT_NUM}")
-        sys.exit(1)
-
-    print()
-    print(f"  🟢  Gateway running!  Drone: {args.drone_id}  →  MQTT: fleet/{args.drone_id}/telemetry")
+    print(f"  🟢  Gateway running  —  {len(sessions)} drone(s) active")
     print()
 
-    # ── Start background threads
-    mav_thread = threading.Thread(target=proc.run_forever, daemon=True, name="mavlink-rx")
-    pub_thread  = threading.Thread(target=pub.run_forever,  daemon=True, name="mqtt-pub")
-    mav_thread.start()
-    pub_thread.start()
+    for s in sessions:
+        s.start_threads()
 
     start_time = time.time()
+    multi       = len(sessions) > 1
 
     try:
         while True:
-            print_status(state, lock, args.drone_id, args.broker, args.hz, start_time)
+            if multi:
+                print_multi_status(sessions, args.broker, args.hz)
+            else:
+                print_status(sessions[0].state, sessions[0].lock,
+                             sessions[0].drone_id, args.broker, args.hz, start_time)
             time.sleep(1.0)
     except KeyboardInterrupt:
         print("\n\n  Gateway stopped. Goodbye.")
