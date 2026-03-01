@@ -1,0 +1,123 @@
+# Hardware-Only Mode: Real ArduPilot Drones → MQTT → Mission Control UI
+# Usage: docker compose -f docker-compose.hardware.yml up
+#
+# Includes minimal stack:
+#  - mosquitto: MQTT broker (required)
+#  - mission-control: Backend UI server (required)
+#
+# Optional monitoring stack (uncomment if needed):
+#  - influxdb: Time-series metrics (optional)
+#  - grafana: Dashboard visualization (optional)
+#  - telegraf: Metrics forwarding (optional if using influxdb)
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mosquitto-broker
+    ports:
+      - "1883:1883"    # Standard MQTT port — used by drone_gateway.py + mission-control
+      - "9001:9001"    # WebSocket port (optional)
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    environment:
+      TZ: UTC
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$$SYS/broker/uptime", "-C", "1", "-W", "3"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - fleet-network
+
+  mission-control:
+    build:
+      context: ..
+      dockerfile: poc/Dockerfile
+    container_name: mission-control
+    ports:
+      - "5000:5000"    # React UI
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - INVENTORY_URL=http://localhost:8001  # Mock if inventory not running
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    networks:
+      - fleet-network
+
+  # ─── Optional Monitoring Stack (uncomment below if desired) ────────────────
+
+  # influxdb:
+  #   image: influxdb:2.7
+  #   container_name: influxdb
+  #   ports:
+  #     - "8086:8086"
+  #   volumes:
+  #     - influxdb_data:/var/lib/influxdb2
+  #     - influxdb_config:/etc/influxdb2
+  #   environment:
+  #     - DOCKER_INFLUXDB_INIT_MODE=setup
+  #     - DOCKER_INFLUXDB_INIT_USERNAME=admin
+  #     - DOCKER_INFLUXDB_INIT_PASSWORD=adminpass123
+  #     - DOCKER_INFLUXDB_INIT_ORG=drone_fleet
+  #     - DOCKER_INFLUXDB_INIT_BUCKET=telemetry
+  #     - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token
+  #   networks:
+  #     - fleet-network
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+
+  # grafana:
+  #   image: grafana/grafana:10.2.3
+  #   container_name: grafana
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #     - ./grafana/provisioning:/etc/grafana/provisioning
+  #     - ./grafana/dashboards:/var/lib/grafana/dashboards
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #     - GF_INSTALL_PLUGINS=grafana-worldmap-panel
+  #     - GF_AUTH_ANONYMOUS_ENABLED=true
+  #     - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+  #   depends_on:
+  #     - influxdb
+  #   networks:
+  #     - fleet-network
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+
+  # telegraf:
+  #   image: telegraf:1.29
+  #   container_name: telegraf
+  #   volumes:
+  #     - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+  #   depends_on:
+  #     - mosquitto
+  #     - influxdb
+  #   networks:
+  #     - fleet-network
+  #   environment:
+  #     - INFLUX_TOKEN=my-super-secret-auth-token
+
+volumes:
+  mosquitto_data:
+  mosquitto_logs:
+  # influxdb_data:
+  # influxdb_config:
+  # grafana_data:
+
+networks:
+  fleet-network:
+    driver: bridge
