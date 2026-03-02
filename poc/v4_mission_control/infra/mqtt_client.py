@@ -79,6 +79,9 @@ class MqttReconnectClient:
         self._running = False
         self._lock = threading.Lock()
         self._reconnect_thread: threading.Thread | None = None
+        self._subscriptions: list[tuple[str, int]] = []
+        self._message_cb: Callable | None = None
+        self._client.on_message = self._paho_on_message
 
     # ------------------------------------------------------------------
     # Public API
@@ -100,6 +103,20 @@ class MqttReconnectClient:
             log.warning("MQTT publish skipped — not connected (topic=%s)", topic)
             return
         self._client.publish(topic, payload, qos=qos)
+
+    def subscribe(self, topic: str, qos: int = 0) -> None:
+        """Register a topic subscription.  Re-subscribed automatically on reconnect."""
+        self._subscriptions.append((topic, qos))
+        if self.is_connected:
+            self._client.subscribe(topic, qos)
+            log.debug("MQTT subscribed: %s", topic)
+
+    def set_message_callback(self, cb: Callable) -> None:
+        """Register a callback invoked for every received message.
+
+        Signature: ``cb(topic: str, payload: bytes) -> None``.
+        """
+        self._message_cb = cb
 
     def start_reconnect_loop(self) -> None:
         """Spawn the background reconnect thread (idempotent)."""
@@ -133,6 +150,10 @@ class MqttReconnectClient:
         with self._lock:
             self._connected = True
         log.info("MQTT connected (rc=%s)", reason_code)
+        # Re-apply subscriptions after every (re)connect
+        for topic, qos in self._subscriptions:
+            client.subscribe(topic, qos)
+            log.debug("MQTT re-subscribed: %s", topic)
         if self._on_connect_cb:
             try:
                 self._on_connect_cb()
@@ -155,6 +176,14 @@ class MqttReconnectClient:
     # ------------------------------------------------------------------
     # Reconnect loop (runs on daemon thread)
     # ------------------------------------------------------------------
+
+    def _paho_on_message(self, client, userdata, msg):  # noqa: ANN001
+        """Dispatch incoming MQTT messages to the registered callback."""
+        if self._message_cb:
+            try:
+                self._message_cb(msg.topic, msg.payload)
+            except Exception:
+                log.exception("message_cb raised for topic=%s", msg.topic)
 
     def _try_connect(self) -> bool:
         """Single connection attempt. Returns ``True`` on success."""

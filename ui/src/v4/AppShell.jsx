@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { V4_ENVIRONMENT, V4_NAV_ITEMS } from './constants';
+import { getSocket } from '../socket';
 
 const DEFAULT_SERVICE_STATUS = {
   mqtt: false,
@@ -29,6 +30,9 @@ async function fetchServiceStatus() {
 
 export default function AppShell() {
   const [serviceStatus, setServiceStatus] = useState(DEFAULT_SERVICE_STATUS);
+
+  // Establish Socket.IO connection for real-time telemetry and events
+  useEffect(() => { getSocket(); }, []);
 
   useEffect(() => {
     let cancelled = false;

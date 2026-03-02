@@ -211,6 +211,74 @@ def submit_command(
     return result
 
 
+# ---------------------------------------------------------------------------
+# v3-compatible command shims  (/command/{verb} and /command/bulk/{verb})
+# ---------------------------------------------------------------------------
+
+class _V3CommandBody(BaseModel):
+    drone_id: str
+    params: dict = {}
+    requested_by: str | None = None
+
+
+class _V3BulkCommandBody(BaseModel):
+    drone_ids: list[str]
+    params: dict = {}
+    requested_by: str | None = None
+
+
+@router.post("/command/{verb}", response_model=None)
+def submit_command_v3(
+    verb: str,
+    body: _V3CommandBody,
+    runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
+):
+    """v3-compatible single-drone command shim."""
+    if operator is not ANONYMOUS_ADMIN or body.requested_by is None:
+        body.requested_by = operator.username
+    check_command_permission(operator, body.drone_id)
+    payload = CommandRequest(
+        drone_id=body.drone_id,
+        command=verb.upper(),
+        params=body.params,
+        requested_by=body.requested_by,
+    )
+    result = runtime.command_service.submit_command(payload)
+    if isinstance(result, CommandRejectedResponse):
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST,
+                            content=result.model_dump(mode="json"))
+    return result
+
+
+@router.post("/command/bulk/{verb}", response_model=None)
+def submit_bulk_command_v3(
+    verb: str,
+    body: _V3BulkCommandBody,
+    runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
+) -> list:
+    """v3-compatible multi-drone bulk command shim."""
+    if operator is not ANONYMOUS_ADMIN or body.requested_by is None:
+        body.requested_by = operator.username
+    results = []
+    for drone_id in body.drone_ids:
+        try:
+            check_command_permission(operator, drone_id)
+        except HTTPException:
+            results.append({"drone_id": drone_id, "status": "REJECTED", "reason": "permission denied"})
+            continue
+        payload = CommandRequest(
+            drone_id=drone_id,
+            command=verb.upper(),
+            params=body.params,
+            requested_by=body.requested_by,
+        )
+        result = runtime.command_service.submit_command(payload)
+        results.append(result.model_dump(mode="json"))
+    return results
+
+
 @router.get("/commands", response_model=CommandHistoryResponse)
 def read_commands(
     drone_id: str | None = None,

@@ -16,7 +16,7 @@ Topic schema matches swarmsim.py so mission_control_v3.py picks it
 up with zero modification.  DroneID uses the "HW-" prefix which maps
 to source="EDGE_AGENT" in the UI.
 
-READ-ONLY — no arming or flight commands are issued.
+Supports ARM / DISARM / FORCE_ARM command ingress via MQTT.
 
 Usage:
     python drone_gateway.py
@@ -664,7 +664,7 @@ Examples:
 
     print("╔══════════════════════════════════════════════════════════════╗")
     print("║  AIP POC-2 · Drone Gateway  (MAVLink → MQTT bridge)         ║")
-    print("║  READ-ONLY — no arming or flight commands                   ║")
+    print("║  ARM / DISARM / FORCE_ARM  ·  telemetry via MQTT           ║")
     print("╚══════════════════════════════════════════════════════════════╝")
     print()
     print("  ⚠️  Make sure Mission Planner is CLOSED (port conflict).")

@@ -73,3 +73,7 @@ def get_db() -> Generator[Session, None, None]:
         raise
     finally:
         session.close()
+
+
+# Alias used by mission_repo.py
+get_session = db_session

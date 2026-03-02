@@ -1,5 +1,9 @@
 """Shared runtime container for the v4 foundation slice."""
 
+from __future__ import annotations
+
+import json
+import logging
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -18,6 +22,8 @@ from .health_service import HealthService
 from .mission_service import MissionService
 from .preflight import PreflightService
 from .service_status import ServiceStatusService
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -78,7 +84,7 @@ def get_service_container() -> ServiceContainer:
         name="inventory",
     )
 
-    # ---- MQTT client (W15) — starts background reconnect thread ---------
+    # ---- MQTT client (W15) — create but don't connect yet ---------------
     mqtt_client: MqttReconnectClient | None = None
     if settings.MQTT_HOST:
         mqtt_client = MqttReconnectClient(
@@ -87,17 +93,75 @@ def get_service_container() -> ServiceContainer:
             on_connect=service_status.report_mqtt_connected,
             on_disconnect=service_status.report_mqtt_disconnected,
         )
-        mqtt_client.connect()
 
     # ---- Services --------------------------------------------------------
     preflight_service = PreflightService(settings=settings)
+
+    # ---- Inline MQTT broker adapter for CommandService -------------------
+    class _MqttCommandBroker:
+        """Minimal MessageBroker shim backed by MqttReconnectClient."""
+
+        def __init__(self, client: MqttReconnectClient | None) -> None:
+            self._client = client
+
+        def publish(self, topic: str, payload: dict) -> None:
+            if self._client:
+                self._client.publish(topic, json.dumps(payload))
+            else:
+                log.warning("Command publish skipped — no MQTT client (topic=%s)", topic)
+
+        def subscribe(self, *_a, **_kw) -> None:  # managed by runtime
+            pass
+
+        def start(self) -> None:
+            pass
+
+        def stop(self) -> None:
+            pass
+
+    mqtt_broker_adapter = _MqttCommandBroker(mqtt_client)
+
     command_service = CommandService(
         settings=settings,
         command_repo=command_repo,
         event_repo=event_repo,
         preflight_service=preflight_service,
+        broker=mqtt_broker_adapter,
         ws_manager=ws_manager,
     )
+
+    # ---- Wire MQTT subscriptions + WS relay (now command_service exists) -
+    if mqtt_client is not None:
+        def _on_mqtt_message(topic: str, payload: bytes) -> None:
+            try:
+                data = json.loads(payload)
+            except (json.JSONDecodeError, TypeError):
+                log.debug("MQTT non-JSON payload on %s — skipped", topic)
+                return
+
+            if "/telemetry" in topic or "/status" in topic:
+                ws_manager.broadcast_sync("telemetry_update", data)
+            elif topic == "fleet/system/command_ack":
+                ws_manager.broadcast_sync("command_ack", data)
+                cmd_id_raw = data.get("cmd_id")
+                if cmd_id_raw:
+                    from uuid import UUID as _UUID
+                    try:
+                        uid = _UUID(str(cmd_id_raw))
+                        if data.get("result") == "OK":
+                            command_service.ack_command(uid)
+                        else:
+                            command_service.nack_command(
+                                uid, reason=data.get("detail", "nack")
+                            )
+                    except Exception:
+                        pass
+
+        mqtt_client.set_message_callback(_on_mqtt_message)
+        mqtt_client.subscribe("fleet/+/telemetry")
+        mqtt_client.subscribe("fleet/+/status")
+        mqtt_client.subscribe("fleet/system/command_ack")
+        mqtt_client.connect()
     mission_service = MissionService(
         mission_repo=mission_repo,
         event_repo=event_repo,
