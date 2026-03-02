@@ -20,6 +20,11 @@ class Settings(BaseSettings):
     COMMAND_MAX_RETRIES: int = 3
     COMMAND_RETRY_BACKOFF_SEC: tuple[int, int, int] = (1, 2, 4)
 
+    # Persistence
+    DATABASE_URL: str = "postgresql+psycopg2://v4:v4@localhost:5432/missioncontrol"
+    USE_DATABASE: bool = False  # set True in docker-compose; False keeps in-memory repos for tests
+    EVENT_SNAPSHOT_INTERVAL: int = 100  # write DroneSnapshot every N events per drone
+
     @field_validator("ENVIRONMENT")
     @classmethod
     def normalize_environment(cls, value: str) -> str:

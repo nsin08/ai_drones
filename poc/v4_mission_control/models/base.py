@@ -1,13 +1,16 @@
-"""Shared SQLAlchemy base classes.
-
-Alembic wiring is intentionally deferred until a real DB session and migration
-path are introduced in the next persistence sprint.
-"""
+"""Shared SQLAlchemy base classes."""
 
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime
+from sqlalchemy import DateTime, JSON, Uuid
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+# Cross-dialect JSON type: JSONB on PostgreSQL, plain JSON on SQLite (used in tests).
+JsonBType = JSON().with_variant(JSONB(), "postgresql")
+
+# Cross-dialect UUID type: native UUID on PostgreSQL, VARCHAR on SQLite.
+UuidType = Uuid(as_uuid=True)
 
 
 def utc_now() -> datetime:
