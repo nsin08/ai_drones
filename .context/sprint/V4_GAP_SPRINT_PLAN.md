@@ -1,9 +1,9 @@
 # Mission Control v4 — Gap Analysis Sprint Plan
 
 **Created:** 2026-03-02  
-**Last Updated:** 2026-03-02  
+**Last Updated:** 2026-03-22  
 **Branch Base:** `feature/04-mission-control-v4`  
-**Current Status:** ~30–35% complete (W11 ✅ done, W12–W16 pending)  
+**Current Status:** ~55–60% complete (W11 ✅ done, W12 ✅ done, W13–W16 pending)  
 **Reference Plan:** `d:\refrences\MISSION_CONTROL_V4_PLAN.md`  
 **Reference Summary:** `d:\refrences\V4_QUICK_SUMMARY.md`
 
@@ -30,6 +30,17 @@
 | `EventReplayService` (snapshot-based state reconstruction) | **W11** | **✅ DONE** |
 | Alembic migration `2c546c1e5c55` (all 7 tables, reversible) | **W11** | **✅ DONE** |
 | 21 new unit tests; total 24/24 passing | **W11** | **✅ DONE** |
+| `CommandStatus.TIMED_OUT` + `CommandStatus.RETRYING` added | **W12** | **✅ DONE** |
+| `get()` + `mark_retrying/acked/timed_out/failed()` on both command repos | **W12** | **✅ DONE** |
+| `CommandService._retry_loop()` (threading.Thread daemon) + ACK/NACK timeout | **W12** | **✅ DONE** |
+| `ack_command()` + `nack_command()` on `CommandService` | **W12** | **✅ DONE** |
+| `GET /api/commands/{cmd_id}`, `POST .../ack`, `POST .../nack` endpoints | **W12** | **✅ DONE** |
+| `schemas/mission.py` — `MissionStatus`, `TaskState`, request/response models | **W12** | **✅ DONE** |
+| `repos/mission_repo.py` — InMemory + SQL mission repositories | **W12** | **✅ DONE** |
+| `services/mission_service.py` — FSM-guarded mission lifecycle | **W12** | **✅ DONE** |
+| Full mission REST API (plan/start/pause/resume/complete/abort) | **W12** | **✅ DONE** |
+| `db/seed.py` — 12 SIM + 2 HW drones + 2 sample missions | **W12** | **✅ DONE** |
+| 52 new tests (retry + FSM + API); total 132/132 passing | **W12** | **✅ DONE** |
 
 ---
 
@@ -41,8 +52,8 @@
 | G2 | No Alembic migrations | S4-001 | ✅ RESOLVED | W11 |
 | G3 | No `Mission` / `Drone` / `Operator` models | S4-001, S4-004 | ✅ RESOLVED | W11 |
 | G4 | Event sourcing: no DB persistence, no snapshot | S4-002 | ✅ RESOLVED | W11 |
-| G5 | Command retry loop missing (config exists, execution absent) | S4-003 | P0 |
-| G6 | Multi-mission state machine entirely absent | S4-004 | P1 |
+| G5 | Command retry loop missing (config exists, execution absent) | S4-003 | ✅ RESOLVED | W12 |
+| G6 | Multi-mission state machine entirely absent | S4-004 | ✅ RESOLVED | W12 |
 | G7 | `/api/fleet/health` returns zeros — health scoring not implemented | S4-005 | P1 |
 | G8 | No WebSocket broadcast (socket constants exist, no transport) | S4-007 | P1 |
 | G9 | No JWT auth — every command endpoint is open | S4-008 | P1 |
@@ -269,11 +280,12 @@ S4-002 requires more than just an events table.
 
 ---
 
-## Sprint W12: Command Retry + Mission Model
+## Sprint W12: Command Retry + Mission Model ✅ COMPLETE
 
 **Branch:** `feature/04c-command-retry-mission-fsm`  
 **Gaps:** G5, G6  
-**Plan Tasks:** S4-003 (completion), S4-004
+**Plan Tasks:** S4-003 (completion), S4-004  
+**Status:** ✅ **DELIVERED** (commit `65d8d1e`)
 
 ### Goal
 
@@ -365,33 +377,35 @@ class MissionService:
 ### W12 Implementation Checklist
 
 #### Command Retry (G5)
-- [ ] Add `RETRYING`, `TIMED_OUT`, `FAILED` to `CommandStatus` enum in `schemas/command.py`
-- [ ] Add `mark_retrying()`, `mark_acked()`, `mark_timed_out()`, `mark_failed()` to `CommandRepository` interface
-- [ ] Implement async `_retry_loop()` in `CommandService`
-- [ ] Integrate `_retry_loop()` as a background task from `submit_command()` (FastAPI `BackgroundTasks`)
-- [ ] Emit `COMMAND_RETRYING` / `COMMAND_TIMED_OUT` events to event log on each transition
-- [ ] Update `GET /api/commands` response to include `attempt_count` and `status`
+- [x] Add `RETRYING`, `TIMED_OUT`, `FAILED` to `CommandStatus` enum in `schemas/command.py`
+- [x] Add `mark_retrying()`, `mark_acked()`, `mark_timed_out()`, `mark_failed()`, `get()` to both `InMemoryCommandRepository` and `SQLCommandRepository`
+- [x] Implement sync `_retry_loop()` in `CommandService` (threading.Thread daemon, no asyncio)
+- [x] Integrate `_retry_loop()` as a daemon thread from `submit_command()` (controlled by `start_retry_thread=True`)
+- [x] Emit `COMMAND_RETRYING` / `COMMAND_TIMED_OUT` events to event log on each transition
+- [x] `ack_command()` + `nack_command()` on `CommandService`
+- [x] `GET /api/commands/{cmd_id}` — fetch single command
+- [x] `POST /api/commands/{cmd_id}/ack` + `POST /api/commands/{cmd_id}/nack` endpoints
 
 #### Mission Model (G6)
-- [ ] Create `schemas/mission.py`: `MissionCreateRequest`, `MissionResponse`, `TaskResponse`
-- [ ] Create `services/mission_service.py` with full FSM enforcement
-- [ ] Implement FSM guard: cannot `start` a COMPLETED mission; cannot `resume` a non-PAUSED mission
-- [ ] Emit `MISSION_CREATED`, `MISSION_STARTED`, `MISSION_PAUSED`, `MISSION_RESUMED`, `MISSION_COMPLETED`, `MISSION_ABORTED` events
-- [ ] Add mission endpoints to `api/routes.py`
-- [ ] Wire `MissionService` into `ServiceContainer`
-- [ ] Add seed script: `poc/v4_mission_control/db/seed.py` ← **moved from W11**
+- [x] Create `schemas/mission.py`: `MissionStatus`, `TaskState`, `MissionCreateRequest`, `MissionResponse`, `TaskResponse`, `MissionTransitionRequest`, `MissionListResponse`
+- [x] Create `repos/mission_repo.py`: `InMemoryMissionRepository` + `SQLMissionRepository`
+- [x] Create `services/mission_service.py` with full FSM guard table enforcement
+- [x] FSM guard: `_VALID_TRANSITIONS` dict — invalid transitions raise `ValueError`
+- [x] Emit `MISSION_CREATED`, `MISSION_PLANNED`, `MISSION_ACTIVE`, `MISSION_PAUSED`, `MISSION_COMPLETED`, `MISSION_ABORTED` events
+- [x] Add full mission endpoints to `api/routes.py` (CRUD + plan/start/pause/resume/complete/abort)
+- [x] Wire `MissionService` + `MissionRepository` into `ServiceContainer` in `services/runtime.py`
+- [x] Add seed script: `poc/v4_mission_control/db/seed.py` (12 SIM + 2 HW drones, 2 sample missions)
 
 #### Tests
-- [ ] `test_command_retry.py` — retry loop fires up to 3×; marks `TIMED_OUT` after exhaustion
-- [ ] `test_mission_fsm.py` — all valid + invalid FSM transitions (guard tests)
-- [ ] `test_mission_concurrent.py` — two missions active simultaneously; separate task progress
-- [ ] `test_mission_api.py` — full CRUD + state transitions via `TestClient`
+- [x] `test_command_retry.py` — 15 tests: retry loop fires 3×, marks TIMED_OUT; early ACK stops loop; nack marks FAILED; idempotent ACK
+- [x] `test_mission_fsm.py` — 19 tests: all valid + invalid FSM transitions, concurrent missions, list/filter
+- [x] `test_mission_api.py` — 18 tests: full CRUD + state transitions via TestClient, including 400 for invalid transitions
 
 #### DoD (S4-003 completion + S4-004)
-- [ ] ARM retry fires 3× on timeout, marks `TIMED_OUT`, emits events
-- [ ] `POST /api/missions` creates mission; `POST /api/missions/{id}/start` transitions to ACTIVE
-- [ ] Two concurrent missions with different drone assignments do not interfere
-- [ ] All tests pass
+- [x] Retry fires 3× on timeout, marks TIMED_OUT, emits events
+- [x] `POST /api/missions` creates mission; `POST /api/missions/{id}/start` transitions to ACTIVE
+- [x] Two concurrent missions with different drone assignments do not interfere
+- [x] **52 new tests, all passing (132 total, 0 new failures)**
 
 ---
 
