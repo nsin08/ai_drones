@@ -1,38 +1,46 @@
 # Mission Control v4 — Gap Analysis Sprint Plan
 
 **Created:** 2026-03-02  
+**Last Updated:** 2026-03-02  
 **Branch Base:** `feature/04-mission-control-v4`  
-**Gap Analysis Baseline:** Implementation Status assessed 2026-03-02 (~25-30% complete)  
+**Current Status:** ~30–35% complete (W11 ✅ done, W12–W16 pending)  
 **Reference Plan:** `d:\refrences\MISSION_CONTROL_V4_PLAN.md`  
 **Reference Summary:** `d:\refrences\V4_QUICK_SUMMARY.md`
 
 ---
 
-## Baseline: What's Already Done (W10)
+## Baseline: What's Already Done (W10 + W11)
 
-| Component | State |
-|-----------|-------|
-| FastAPI app factory (`app.py`) | ✅ Done |
-| `Settings` config with all thresholds | ✅ Done |
-| `Command` + `Event` SQLAlchemy models (schema only) | ✅ Done |
-| `PreflightService` — battery, GPS, EKF, calibration, sensor health | ✅ Done |
-| `CommandService.submit_command()` — preflight-first rejection | ✅ Done |
-| `InMemoryCommandRepository` + `InMemoryEventRepository` | ✅ Done (stub) |
-| REST: `/api/health`, `/api/drones/{id}/preflight`, `/api/commands`, `/api/fleet/health` | ✅ Done (partial) |
-| `ServiceContainer` / `get_service_container()` singleton | ✅ Done |
-| 3 passing unit tests | ✅ Done |
-| `ui/src/v4/` frontend routed shell | ✅ Done (stub) |
+| Component | Sprint | State |
+|-----------|--------|-------|
+| FastAPI app factory (`app.py`) | W10 | ✅ Done |
+| `Settings` config with all thresholds | W10 | ✅ Done |
+| `Command` + `Event` SQLAlchemy models (schema only) | W10 | ✅ Done |
+| `PreflightService` — battery, GPS, EKF, calibration, sensor health | W10 | ✅ Done |
+| `CommandService.submit_command()` — preflight-first rejection | W10 | ✅ Done |
+| `InMemoryCommandRepository` + `InMemoryEventRepository` | W10 | ✅ Done (stub) |
+| REST: `/api/health`, `/api/drones/{id}/preflight`, `/api/commands`, `/api/fleet/health` | W10 | ✅ Done (partial) |
+| `ServiceContainer` / `get_service_container()` singleton | W10 | ✅ Done |
+| 3 passing unit tests | W10 | ✅ Done |
+| `ui/src/v4/` frontend routed shell | W10 | ✅ Done (stub) |
+| PostgreSQL 16 service (docker-compose, alembic) | **W11** | **✅ DONE** |
+| `Mission`/`Task`/`Drone`/`DroneSnapshot`/`Operator` ORM models | **W11** | **✅ DONE** |
+| `SQLCommandRepository` + `SQLEventRepository` (DB-backed) | **W11** | **✅ DONE** |
+| `DroneRepository` + `DroneSnapshotRepository` | **W11** | **✅ DONE** |
+| `EventReplayService` (snapshot-based state reconstruction) | **W11** | **✅ DONE** |
+| Alembic migration `2c546c1e5c55` (all 7 tables, reversible) | **W11** | **✅ DONE** |
+| 21 new unit tests; total 24/24 passing | **W11** | **✅ DONE** |
 
 ---
 
 ## Gap Summary
 
-| # | Gap | Plan Task | Priority |
-|---|-----|-----------|----------|
-| G1 | No real DB session — `InMemory*` repos only | S4-001 | P0 |
-| G2 | No Alembic migrations | S4-001 | P0 |
-| G3 | No `Mission` / `Drone` / `Operator` models | S4-001, S4-004 | P0 |
-| G4 | Event sourcing: no DB persistence, no snapshot | S4-002 | P0 |
+| # | Gap | Plan Task | Status | Resolution Sprint |
+|---|-----|-----------|--------|-------------------|
+| G1 | No real DB session — `InMemory*` repos only | S4-001 | ✅ RESOLVED | W11 |
+| G2 | No Alembic migrations | S4-001 | ✅ RESOLVED | W11 |
+| G3 | No `Mission` / `Drone` / `Operator` models | S4-001, S4-004 | ✅ RESOLVED | W11 |
+| G4 | Event sourcing: no DB persistence, no snapshot | S4-002 | ✅ RESOLVED | W11 |
 | G5 | Command retry loop missing (config exists, execution absent) | S4-003 | P0 |
 | G6 | Multi-mission state machine entirely absent | S4-004 | P1 |
 | G7 | `/api/fleet/health` returns zeros — health scoring not implemented | S4-005 | P1 |
@@ -61,23 +69,38 @@
 
 ---
 
-## Sprint W11: Persistence + Event Sourcing
+## Sprint W11: Persistence + Event Sourcing ✅ COMPLETE
 
 **Branch:** `feature/04b-event-sourcing`  
 **Gaps:** G1, G2, G3, G4  
-**Plan Tasks:** S4-001, S4-002
+**Plan Tasks:** S4-001, S4-002  
+**Status:** ✅ **DELIVERED** (commits `77d011e` + `ff5011d`)
 
-### Goal
+### Summary
 
-Replace the `InMemory*` stubs with real SQLAlchemy-backed persistence. Wire Alembic migrations. Introduce `Mission`, `Drone`, and `Operator` models. Prove the event log is append-only, queryable, and can reconstruct drone state from events.
+✅ PostgreSQL 16 service added to docker-compose.v4.yml  
+✅ DB session factory + `get_db()` FastAPI dependency  
+✅ Mission/Task, Drone/DroneSnapshot, Operator ORM models  
+✅ Cross-dialect types: JsonBType (JSON/JSONB), UuidType  
+✅ SQLCommandRepository + SQLEventRepository (injectable factory pattern)  
+✅ DroneRepository + DroneSnapshotRepository  
+✅ EventReplayService: snapshot-based state reconstruction  
+✅ ServiceContainer wired via `USE_DATABASE` flag  
+✅ Alembic migration `2c546c1e5c55`: all 7 tables (upgrade/downgrade verified)  
+✅ **24/24 tests passing** (3 W10 + 21 new)  
+✅ Merged to `feature/04-mission-control-v4`  
+
+### Original Goal (now complete)
+
+Replaced the `InMemory*` stubs with real SQLAlchemy-backed persistence. Wired Alembic migrations. Introduced `Mission`, `Drone`, and `Operator` models. Proved the event log is append-only, queryable, and can reconstruct drone state from events.
 
 ---
 
 ### Phase Details
 
-#### Phase W11-A: Database Infrastructure
+#### Phase W11-A: Database Infrastructure ✅ COMPLETE
 
-Add SQLAlchemy async session factory + Alembic + PostgreSQL container.
+~~Add SQLAlchemy async session factory + Alembic + PostgreSQL container.~~ **DONE**
 
 **Files to create / modify:**
 
