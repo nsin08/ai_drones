@@ -1,0 +1,739 @@
+"""
+Mission Control Dashboard - Flask Backend
+
+Provides:
+- Web UI for mission visualization with Leaflet maps
+- Real-time telemetry via WebSocket
+- Command interface with request/acknowledge strategy
+- Leader election events
+- Mission isolation and configuration
+"""
+
+from flask import Flask, render_template, request, jsonify
+from flask_socketio import SocketIO, emit
+import paho.mqtt.client as mqtt
+import json
+import threading
+import requests
+from datetime import datetime
+import uuid
+import subprocess
+import time
+import os
+import signal
+import socket
+
+app = Flask(__name__)
+app.config['SECRET_KEY'] = 'mission-control-secret'
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Global state
+current_mission = None  # Track active mission (PATROL, ESCORT, PERIMETER_GUARD)
+mission_config = {}
+drone_states = {}  # Only drones from current mission
+mission_traces = {}  # {drone_id: [(lat, lon, alt, battery, timestamp), ...]}
+altitude_history = {}  # {drone_id: [(timestamp, altitude_m), ...]}
+active_drones = set()
+leader_history = []  # Track leader changes
+command_status = {}  # {cmd_id: {"drone_id": "...", "command": "...", "status": "REQUESTED|ACK|FAILED"}}
+pending_commands = {}  # {cmd_id: command_data} Commands awaiting acknowledgment
+mission_assignments = {}  # {mission_type: {drone_id: role}}
+
+# Mission subprocess management
+simulator_process = None  # subprocess.Popen handle
+mission_start_time = None
+mission_duration = None
+
+# MQTT client
+MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+INVENTORY_URL = os.getenv("INVENTORY_URL", "http://localhost:8001")
+
+# paho-mqtt 2.x defaults to Callback API v1 unless specified; v1 is deprecated.
+mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+mqtt_client.reconnect_delay_set(min_delay=1, max_delay=30)
+
+def on_mqtt_connect(client, userdata, flags, reason_code, properties=None):
+    """Subscribe to all fleet telemetry on MQTT connect."""
+    print(f"MQTT connected (rc={reason_code})")
+    client.subscribe("fleet/+/telemetry")
+    client.subscribe("fleet/+/leader_election")
+    client.subscribe("fleet/+/status")
+    client.subscribe("fleet/system/command_ack")
+
+def on_mqtt_message(client, userdata, msg):
+    """Handle incoming MQTT messages and broadcast to WebSocket clients."""
+    try:
+        topic = msg.topic
+        payload = json.loads(msg.payload.decode())
+        
+        if "telemetry" in topic:
+            drone_id = payload.get("drone_id")
+            mission_type = payload.get("mission_type")
+            
+            # Mission isolation: only filter when mission_type is present
+            if current_mission and mission_type and mission_type != current_mission:
+                return
+            
+            drone_states[drone_id] = payload
+            active_drones.add(drone_id)
+            
+            # Store trace for map visualization
+            if drone_id not in mission_traces:
+                mission_traces[drone_id] = []
+            
+            lat = payload.get("latitude", payload.get("lat", 0))
+            lon = payload.get("longitude", payload.get("lon", 0))
+            alt = payload.get("altitude_m", 0)
+            
+            mission_traces[drone_id].append({
+                "lat": lat,
+                "lon": lon,
+                "alt": alt,
+                "battery": payload.get("battery_pct", 0),
+                "timestamp": payload.get("timestamp", datetime.now().timestamp()),
+                "role": payload.get("mission_role", "UNKNOWN")
+            })
+            
+            # Keep last 100 points per drone
+            if len(mission_traces[drone_id]) > 100:
+                mission_traces[drone_id] = mission_traces[drone_id][-100:]
+            
+            # Track altitude history for chart
+            if drone_id not in altitude_history:
+                altitude_history[drone_id] = []
+            
+            altitude_history[drone_id].append({
+                "timestamp": payload.get("timestamp", datetime.now().timestamp()),
+                "altitude_m": alt
+            })
+            
+            # Keep last 500 altitude points per drone
+            if len(altitude_history[drone_id]) > 500:
+                altitude_history[drone_id] = altitude_history[drone_id][-500:]
+            
+            # Broadcast to all connected web clients
+            socketio.emit('telemetry_update', payload)
+        
+        elif "leader_election" in topic:
+            leader_history.append({
+                "timestamp": datetime.now().isoformat(),
+                "event": payload
+            })
+            socketio.emit('leader_election', payload)
+        
+        elif "status" in topic:
+            socketio.emit('status_update', payload)
+        
+        elif "command_ack" in topic:
+            # Handle command acknowledgment
+            cmd_id = payload.get("cmd_id")
+            if cmd_id in command_status:
+                command_status[cmd_id]["status"] = "ACK"
+                command_status[cmd_id]["result"] = payload.get("result", "SUCCESS")
+                command_status[cmd_id]["ack_timestamp"] = payload.get("timestamp", datetime.now().isoformat())
+                socketio.emit('command_ack', command_status[cmd_id])
+                # Auto-remove after 10 seconds
+                socketio.emit('command_auto_remove', {'cmd_id': cmd_id, 'delay': 10})
+    
+    except Exception as e:
+        print(f"Error processing MQTT message: {e}")
+
+mqtt_client.on_connect = on_mqtt_connect
+mqtt_client.on_message = on_mqtt_message
+
+def start_mqtt():
+    """Start MQTT client in background thread."""
+    backoff_sec = 1
+    while True:
+        try:
+            mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)
+            mqtt_client.loop_forever(retry_first_connection=True)
+        except ConnectionRefusedError:
+            print(f"MQTT connection refused at {MQTT_HOST}:{MQTT_PORT}. Is the broker running?")
+        except (OSError, socket.error) as e:
+            print(f"MQTT connect error to {MQTT_HOST}:{MQTT_PORT}: {e}")
+        except Exception as e:
+            print(f"MQTT unexpected error: {e}")
+
+        time.sleep(backoff_sec)
+        backoff_sec = min(backoff_sec * 2, 30)
+
+# Start MQTT listener
+mqtt_thread = threading.Thread(target=start_mqtt, daemon=True)
+mqtt_thread.start()
+
+@app.route('/')
+def index():
+    """Serve the mission control dashboard."""
+    return render_template('mission_control_v2.html')
+
+@app.route('/planner')
+def planner():
+    """Serve the mission planner UI."""
+    return render_template('mission_control_v2.html')
+
+@app.route('/api/inventory', methods=['GET'])
+def get_inventory():
+    """Proxy inventory list from inventory service."""
+    try:
+        resp = requests.get(f"{INVENTORY_URL}/inventory", timeout=3)
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": f"Inventory service unavailable: {e}"}), 503
+
+@app.route('/api/inventory/<drone_id>', methods=['GET'])
+def get_inventory_item(drone_id):
+    """Proxy inventory item from inventory service."""
+    try:
+        resp = requests.get(f"{INVENTORY_URL}/inventory/{drone_id}", timeout=3)
+        resp.raise_for_status()
+        return jsonify(resp.json())
+    except Exception as e:
+        return jsonify({"error": f"Inventory service unavailable: {e}"}), 503
+
+@app.route('/api/missions', methods=['GET'])
+def get_missions():
+    """Get available missions and their configuration."""
+    return jsonify({
+        "available_missions": ["PATROL", "ESCORT", "PERIMETER_GUARD"],
+        "current_mission": current_mission,
+        "mission_config": mission_config,
+        "drone_counts": {
+            "PATROL": mission_config.get("PATROL", {}).get("drone_count", 5),
+            "ESCORT": mission_config.get("ESCORT", {}).get("drone_count", 5),
+            "PERIMETER_GUARD": mission_config.get("PERIMETER_GUARD", {}).get("drone_count", 5),
+        }
+    })
+
+@app.route('/api/select-mission', methods=['POST'])
+def select_mission():
+    """Select active mission and clear previous mission data."""
+    global current_mission, drone_states, mission_traces, altitude_history
+    
+    data = request.json
+    mission_type = data.get('mission_type')
+    drone_count = data.get('drone_count', 5)
+    team_type = data.get('team_type', mission_type)  # Formation type
+    
+    if mission_type not in ["PATROL", "ESCORT", "PERIMETER_GUARD"]:
+        return jsonify({"error": "Invalid mission type"}), 400
+    
+    # Clear previous mission data
+    drone_states = {}
+    mission_traces = {}
+    altitude_history = {}
+    active_drones.clear()
+    
+    # Set new mission
+    current_mission = mission_type
+    mission_config[mission_type] = {
+        "drone_count": drone_count,
+        "team_type": team_type
+    }
+    
+    # Broadcast mission change to all clients
+    socketio.emit('mission_changed', {
+        "mission_type": mission_type,
+        "drone_count": drone_count,
+        "team_type": team_type,
+        "timestamp": datetime.now().isoformat()
+    })
+    
+    return jsonify({
+        "status": "success",
+        "message": f"Mission switched to {mission_type} with {drone_count} drones",
+        "current_mission": current_mission
+    })
+
+@app.route('/api/mission/assign', methods=['POST'])
+def assign_mission():
+    """Assign selected drones and roles to a mission."""
+    data = request.json or {}
+    mission_type = data.get('mission_type')
+    drone_ids = data.get('drone_ids', [])
+    role_map = data.get('role_map', {})
+
+    if not mission_type:
+        return jsonify({"error": "mission_type required"}), 400
+    if not isinstance(drone_ids, list) or not drone_ids:
+        return jsonify({"error": "drone_ids required"}), 400
+
+    if mission_type not in mission_assignments:
+        mission_assignments[mission_type] = {}
+
+    for drone_id in drone_ids:
+        role = role_map.get(drone_id)
+        if role:
+            mission_assignments[mission_type][drone_id] = role
+            cmd_id = str(uuid.uuid4())
+            command = {
+                "cmd_id": cmd_id,
+                "command": "SET_ROLE",
+                "role": role,
+                "drone_id": drone_id,
+                "timestamp": datetime.now().isoformat()
+            }
+            command_status[cmd_id] = {
+                "cmd_id": cmd_id,
+                "command": "SET_ROLE",
+                "role": role,
+                "drone_id": drone_id,
+                "status": "REQUESTED",
+                "request_timestamp": datetime.now().isoformat()
+            }
+            pending_commands[cmd_id] = command
+            mqtt_client.publish(f"fleet/{drone_id}/command", json.dumps(command))
+        else:
+            mission_assignments[mission_type][drone_id] = mission_assignments[mission_type].get(drone_id, "UNASSIGNED")
+
+    socketio.emit('mission_assignment_updated', {
+        "mission_type": mission_type,
+        "assignments": mission_assignments[mission_type]
+    })
+
+    return jsonify({
+        "status": "success",
+        "mission_type": mission_type,
+        "assigned": len(drone_ids)
+    })
+
+@app.route('/api/mission/plan', methods=['POST'])
+def plan_mission():
+    """Upload mission plan (waypoints) to selected drones via MQTT."""
+    data = request.json or {}
+    mission_type = data.get('mission_type')
+    drone_ids = data.get('drone_ids', [])
+    waypoints = data.get('waypoints', [])
+
+    if not mission_type:
+        return jsonify({"error": "mission_type required"}), 400
+    if not isinstance(drone_ids, list) or not drone_ids:
+        return jsonify({"error": "drone_ids required"}), 400
+    if not isinstance(waypoints, list) or not waypoints:
+        return jsonify({"error": "waypoints required"}), 400
+
+    for drone_id in drone_ids:
+        cmd_id = str(uuid.uuid4())
+        command = {
+            "cmd_id": cmd_id,
+            "command": "UPLOAD_MISSION",
+            "mission_type": mission_type,
+            "waypoints": waypoints,
+            "drone_id": drone_id,
+            "timestamp": datetime.now().isoformat()
+        }
+        command_status[cmd_id] = {
+            "cmd_id": cmd_id,
+            "command": "UPLOAD_MISSION",
+            "mission_type": mission_type,
+            "drone_id": drone_id,
+            "status": "REQUESTED",
+            "request_timestamp": datetime.now().isoformat()
+        }
+        pending_commands[cmd_id] = command
+        mqtt_client.publish(f"fleet/{drone_id}/command", json.dumps(command))
+        socketio.emit('command_requested', command_status[cmd_id])
+
+    return jsonify({
+        "status": "success",
+        "mission_type": mission_type,
+        "planned": len(drone_ids)
+    })
+
+@app.route('/api/start-mission', methods=['POST'])
+def start_mission():
+    """Start simulator subprocess with specified mission parameters."""
+    global simulator_process, mission_start_time, mission_duration, current_mission, drone_states, mission_traces, altitude_history
+    
+    data = request.json
+    mission_type = data.get('mission_type')
+    drone_count = data.get('drone_count', 5)
+    duration = data.get('duration', 300)
+    team_type = data.get('team_type', mission_type)
+    
+    if mission_type not in ["PATROL", "ESCORT", "PERIMETER_GUARD"]:
+        return jsonify({"error": "Invalid mission type"}), 400
+    
+    if not (60 <= duration <= 600):
+        return jsonify({"error": "Duration must be 60-600 seconds"}), 400
+    
+    # Kill existing simulator if running
+    if simulator_process and simulator_process.poll() is None:
+        try:
+            os.kill(simulator_process.pid, signal.SIGTERM)
+            simulator_process.wait(timeout=2)
+        except:
+            pass
+    
+    # Clear state
+    drone_states = {}
+    mission_traces = {}
+    altitude_history = {}
+    active_drones.clear()
+    
+    # Set mission config
+    current_mission = mission_type
+    mission_config[mission_type] = {
+        "drone_count": drone_count,
+        "team_type": team_type
+    }
+    mission_start_time = datetime.now()
+    mission_duration = duration
+    
+    # Launch simulator subprocess
+    # Map mission types: PERIMETER_GUARD -> perimeter
+    mission_map = {
+        'PATROL': 'patrol',
+        'ESCORT': 'escort',
+        'PERIMETER_GUARD': 'perimeter'
+    }
+    simulator_mission = mission_map.get(mission_type, mission_type.lower())
+    
+    try:
+        simulator_process = subprocess.Popen([
+            'python', 'mission_simulator.py',
+            '--mission', simulator_mission,
+            '--duration', str(duration),
+            '--drones', str(drone_count),
+            '--broker', 'localhost',
+            '--port', '1883'
+        ], cwd='d:\\wsl_shared\\projects\\ai_drones\\poc')
+        
+        print(f"Simulator started: {mission_type} for {duration}s (PID: {simulator_process.pid})")
+        
+        # Broadcast mission start
+        socketio.emit('mission_started', {
+            "mission_type": mission_type,
+            "drone_count": drone_count,
+            "duration": duration,
+            "start_time": mission_start_time.isoformat()
+        })
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Mission {mission_type} started for {duration}s",
+            "pid": simulator_process.pid
+        })
+    
+    except Exception as e:
+        print(f"Error starting simulator: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/stop-mission', methods=['POST'])
+def stop_mission():
+    """Stop running simulator subprocess."""
+    global simulator_process, current_mission, mission_start_time
+    
+    if not simulator_process or simulator_process.poll() is not None:
+        return jsonify({"error": "No mission running"}), 400
+    
+    try:
+        os.kill(simulator_process.pid, signal.SIGTERM)
+        simulator_process.wait(timeout=2)
+        print(f"Simulator stopped (PID: {simulator_process.pid})")
+        
+        socketio.emit('mission_stopped', {
+            "timestamp": datetime.now().isoformat()
+        })
+        
+        return jsonify({"status": "success", "message": "Mission stopped"})
+    
+    except Exception as e:
+        print(f"Error stopping simulator: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/mission-status')
+def get_mission_status():
+    """Get current mission status including elapsed time and progress."""
+    status = "STOPPED"
+    elapsed = 0
+    progress = 0
+    
+    if simulator_process and simulator_process.poll() is None:
+        status = "RUNNING"
+        if mission_start_time and mission_duration:
+            elapsed = int((datetime.now() - mission_start_time).total_seconds())
+            progress = min(100, int((elapsed / mission_duration) * 100))
+    
+    return jsonify({
+        "status": status,
+        "current_mission": current_mission,
+        "mission_config": mission_config,
+        "elapsed_seconds": elapsed,
+        "total_duration": mission_duration or 0,
+        "progress_percent": progress,
+        "active_drone_count": len(drone_states)
+    })
+
+@app.route('/api/configure-drones', methods=['POST'])
+def configure_drones():
+    """Configure drone count and team type for a mission."""
+    global mission_config
+    
+    data = request.json
+    mission_type = data.get('mission_type')
+    drone_count = data.get('drone_count', 5)
+    team_type = data.get('team_type')
+    
+    if mission_type not in ["PATROL", "ESCORT", "PERIMETER_GUARD"]:
+        return jsonify({"error": "Invalid mission type"}), 400
+    
+    if not (1 <= drone_count <= 10):
+        return jsonify({"error": "Drone count must be 1-10"}), 400
+    
+    mission_config[mission_type] = {
+        "drone_count": drone_count,
+        "team_type": team_type or mission_type
+    }
+    
+    socketio.emit('config_updated', {
+        "mission_type": mission_type,
+        "drone_count": drone_count,
+        "team_type": team_type
+    })
+    
+    return jsonify({
+        "status": "success",
+        "message": f"Configured {mission_type}: {drone_count} drones, team type {team_type}"
+    })
+
+@app.route('/api/altitude-chart')
+def get_altitude_chart():
+    """Get altitude history for all drones (for Chart.js)."""
+    return jsonify(altitude_history)
+
+
+def get_drones():
+    """Get current state of all drones."""
+    return jsonify(drone_states)
+
+@app.route('/api/traces')
+def get_traces():
+    """Get movement traces for all drones."""
+    return jsonify(mission_traces)
+
+@app.route('/api/command/disable', methods=['POST'])
+def disable_drone():
+    """
+    Disable a drone (request/acknowledge strategy).
+    """
+    data = request.json
+    drone_id = data.get('drone_id')
+    
+    if not drone_id:
+        return jsonify({"error": "drone_id required"}), 400
+    
+    cmd_id = str(uuid.uuid4())
+    command = {
+        "cmd_id": cmd_id,
+        "command": "DISABLE",
+        "drone_id": drone_id,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Track command status
+    command_status[cmd_id] = {
+        "cmd_id": cmd_id,
+        "command": "DISABLE",
+        "drone_id": drone_id,
+        "status": "REQUESTED",
+        "request_timestamp": datetime.now().isoformat()
+    }
+    
+    pending_commands[cmd_id] = command
+    mqtt_client.publish(f"fleet/{drone_id}/command", json.dumps(command))
+    
+    # Broadcast command request to UI
+    socketio.emit('command_requested', command_status[cmd_id])
+    
+    return jsonify({
+        "cmd_id": cmd_id,
+        "status": "requested",
+        "message": f"Disable command sent to {drone_id} (awaiting acknowledgment)"
+    })
+
+@app.route('/api/command/enable', methods=['POST'])
+def enable_drone():
+    """Re-enable a previously disabled drone (request/acknowledge strategy)."""
+    data = request.json
+    drone_id = data.get('drone_id')
+    
+    if not drone_id:
+        return jsonify({"error": "drone_id required"}), 400
+    
+    cmd_id = str(uuid.uuid4())
+    command = {
+        "cmd_id": cmd_id,
+        "command": "ENABLE",
+        "drone_id": drone_id,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    # Track command status
+    command_status[cmd_id] = {
+        "cmd_id": cmd_id,
+        "command": "ENABLE",
+        "drone_id": drone_id,
+        "status": "REQUESTED",
+        "request_timestamp": datetime.now().isoformat()
+    }
+    
+    pending_commands[cmd_id] = command
+    mqtt_client.publish(f"fleet/{drone_id}/command", json.dumps(command))
+    
+    # Broadcast command request to UI
+    socketio.emit('command_requested', command_status[cmd_id])
+    
+    return jsonify({
+        "cmd_id": cmd_id,
+        "status": "requested",
+        "message": f"Enable command sent to {drone_id} (awaiting acknowledgment)"
+    })
+
+@app.route('/api/command/hold', methods=['POST'])
+def hold_drone():
+    """Command drone to hold position."""
+    data = request.json
+    drone_id = data.get('drone_id')
+    
+    if not drone_id:
+        return jsonify({"error": "drone_id required"}), 400
+    
+    cmd_id = str(uuid.uuid4())
+    command = {
+        "cmd_id": cmd_id,
+        "command": "HOLD",
+        "drone_id": drone_id,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    command_status[cmd_id] = {
+        "cmd_id": cmd_id,
+        "command": "HOLD",
+        "drone_id": drone_id,
+        "status": "REQUESTED",
+        "request_timestamp": datetime.now().isoformat()
+    }
+    
+    pending_commands[cmd_id] = command
+    mqtt_client.publish(f"fleet/{drone_id}/command", json.dumps(command))
+    socketio.emit('command_requested', command_status[cmd_id])
+    
+    return jsonify({
+        "cmd_id": cmd_id,
+        "status": "requested",
+        "message": f"Hold command sent to {drone_id}"
+    })
+
+@app.route('/api/command/return', methods=['POST'])
+def return_drone():
+    """Command drone to return to base."""
+    data = request.json
+    drone_id = data.get('drone_id')
+    
+    if not drone_id:
+        return jsonify({"error": "drone_id required"}), 400
+    
+    cmd_id = str(uuid.uuid4())
+    command = {
+        "cmd_id": cmd_id,
+        "command": "RETURN",
+        "drone_id": drone_id,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    command_status[cmd_id] = {
+        "cmd_id": cmd_id,
+        "command": "RETURN",
+        "drone_id": drone_id,
+        "status": "REQUESTED",
+        "request_timestamp": datetime.now().isoformat()
+    }
+    
+    pending_commands[cmd_id] = command
+    mqtt_client.publish(f"fleet/{drone_id}/command", json.dumps(command))
+    socketio.emit('command_requested', command_status[cmd_id])
+    
+    return jsonify({
+        "cmd_id": cmd_id,
+        "status": "requested",
+        "message": f"Return command sent to {drone_id}"
+    })
+
+@app.route('/api/command/set_role', methods=['POST'])
+def set_role():
+    """Assign a role to a drone."""
+    data = request.json
+    drone_id = data.get('drone_id')
+    role = data.get('role')
+
+    if not drone_id or not role:
+        return jsonify({"error": "drone_id and role required"}), 400
+
+    cmd_id = str(uuid.uuid4())
+    command = {
+        "cmd_id": cmd_id,
+        "command": "SET_ROLE",
+        "role": role,
+        "drone_id": drone_id,
+        "timestamp": datetime.now().isoformat()
+    }
+
+    command_status[cmd_id] = {
+        "cmd_id": cmd_id,
+        "command": "SET_ROLE",
+        "role": role,
+        "drone_id": drone_id,
+        "status": "REQUESTED",
+        "request_timestamp": datetime.now().isoformat()
+    }
+
+    pending_commands[cmd_id] = command
+    mqtt_client.publish(f"fleet/{drone_id}/command", json.dumps(command))
+    socketio.emit('command_requested', command_status[cmd_id])
+
+    return jsonify({
+        "cmd_id": cmd_id,
+        "status": "requested",
+        "message": f"Set role {role} for {drone_id}"
+    })
+
+@app.route('/api/command/status/<cmd_id>')
+def get_command_status(cmd_id):
+    """Get status of a specific command."""
+    if cmd_id not in command_status:
+        return jsonify({"error": "Command not found"}), 404
+    
+    return jsonify(command_status[cmd_id])
+
+@app.route('/api/leader_history')
+def get_leader_history():
+    """Get history of leader elections."""
+    return jsonify(leader_history)
+
+@socketio.on('connect')
+def handle_connect():
+    """Client connected to WebSocket."""
+    print("Client connected")
+    # Send current state immediately
+    emit('initial_state', {
+        "drones": drone_states,
+        "traces": mission_traces
+    })
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Client disconnected from WebSocket."""
+    print("Client disconnected")
+
+if __name__ == '__main__':
+    print("=" * 70)
+    print("MISSION CONTROL DASHBOARD")
+    print("=" * 70)
+    print("Dashboard: http://localhost:5000")
+    print(f"Connecting to MQTT: {MQTT_HOST}:{MQTT_PORT}")
+    print("=" * 70)
+    
+    socketio.run(app, host='0.0.0.0', port=5000, debug=True, allow_unsafe_werkzeug=True)

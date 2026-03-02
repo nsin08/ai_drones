@@ -1,6 +1,7 @@
-# PoC: Fault Injection with Hexagonal Architecture
+# PoC: Fault Injection + Fleet Telemetry (Hexagonal Architecture)
 
-**Goal:** Demonstrate TDD + Hexagonal + Registry + Strategy patterns in 2 hours
+**Last reviewed:** February 1, 2026  
+**Goal:** Demonstrate TDD + Hexagonal + Registry + Strategy patterns, plus a small end-to-end MQTT telemetry loop (simulator -> mission control UI).
 
 ## What This PoC Demonstrates
 
@@ -8,34 +9,38 @@
 2. **Strategy Pattern** - Pluggable fault models
 3. **Registry Pattern** - Dynamic fault registration
 4. **TDD** - Tests written before implementation
-5. **Port/Adapter** - Swap InMemory ↔ MQTT brokers
+5. **Port/Adapter** - Swap InMemory <-> MQTT brokers
+6. **Fleet Telemetry Loop** - MQTT topics + a minimal Mission Control UI (Flask + Socket.IO)
 
 ## Structure
 
 ```
 poc/
-├── README.md           # This file
+├── README.md                 # This file
+├── QUICKSTART.md             # Short commands to run it
+├── requirements.txt          # Minimal deps
 ├── src/
-│   ├── domain/         # Core business logic (no external deps)
+│   ├── domain/               # Pure domain logic (no I/O deps)
 │   │   ├── telemetry.py
 │   │   ├── fault_model.py
+│   │   ├── fault_registry.py
 │   │   ├── rf_loss_burst.py
-│   │   └── fault_registry.py
+│   │   ├── gnss_multipath.py
+│   │   ├── ekf_unhealthy.py
+│   │   ├── thrust_shortfall.py
+│   │   └── battery_sag.py
 │   ├── ports/
 │   │   └── message_broker.py
-│   ├── adapters/
-│   │   ├── memory_broker.py
-│   │   └── mqtt_broker.py
-│   └── apps/
-│       └── fault_injector.py
+│   └── adapters/
+│       ├── memory_broker.py
+│       └── mqtt_broker.py
 ├── tests/
-│   ├── unit/
-│   │   ├── test_telemetry.py
-│   │   ├── test_rf_loss_burst.py
-│   │   └── test_fault_registry.py
-│   └── integration/
-│       └── test_fault_injector.py
-└── demo.py             # Runnable demo
+│   └── unit/                 # Unit tests for domain + registry
+├── demo.py                   # Fault-model demo runner (memory or MQTT)
+├── mission_simulator.py       # Publishes telemetry to MQTT (fleet/*)
+├── mission_control.py         # Flask UI + WebSocket + MQTT subscriber
+├── templates/                 # Mission Control UI templates
+└── static/                    # Mission Control UI assets
 
 ```
 
@@ -46,13 +51,13 @@ poc/
 cd poc
 python -m venv .venv
 .venv\Scripts\activate  # Windows
-pip install pytest paho-mqtt
+pip install -r requirements.txt
 ```
 
 ### 2. Run tests (TDD verification)
 ```bash
 pytest tests/unit -v
-# Should show 100% pass rate
+# Expected: 56 passed (as of February 1, 2026)
 ```
 
 ### 3. Run demo (without MQTT)
@@ -63,12 +68,22 @@ python demo.py --broker memory
 
 ### 4. Run demo (with MQTT)
 ```bash
-# Terminal 1: Start MQTT broker
-docker compose -f ../../ops/docker-compose.yml up
+# Terminal 1: Start MQTT broker (from repo root)
+cd ..
+cd ops
+docker compose up -d
 
 # Terminal 2: Run demo
+cd ..
+cd poc
 python demo.py --broker mqtt
 ```
+
+## Mission Planner (Inventory + Role Assignment)
+
+If you start the ops stack with inventory enabled, you can open:
+
+- `http://localhost:5000/planner` (role assignment UI)
 
 ## Expected Output
 
@@ -77,25 +92,25 @@ python demo.py --broker mqtt
 [PoC Demo] Broker: InMemoryBroker
 [PoC Demo] Registered fault: RF_LOSS_BURST
 
-[PoC Demo] Simulating 20 telemetry messages...
+[PoC Demo] Simulating 40 telemetry messages...
 
-[00] D001 @ t=0.0s   → ✅ PASSED (battery: 100.0%)
-[01] D001 @ t=1.0s   → ✅ PASSED (battery: 99.8%)
-[02] D001 @ t=2.0s   → ✅ PASSED (battery: 99.6%)
-[03] D001 @ t=3.0s   → ❌ DROPPED (RF_LOSS_BURST active)
-[04] D001 @ t=4.0s   → ❌ DROPPED (RF_LOSS_BURST active)
-[05] D001 @ t=5.0s   → ❌ DROPPED (RF_LOSS_BURST active)
-[06] D001 @ t=6.0s   → ✅ PASSED (burst ended)
+[00] D001 @ t=0.0s   -> PASSED (battery: 100.0%)
+[01] D001 @ t=1.0s   -> PASSED (battery: 99.8%)
+[02] D001 @ t=2.0s   -> PASSED (battery: 99.6%)
+[03] D001 @ t=3.0s   -> DROPPED (RF_LOSS_BURST active)
+[04] D001 @ t=4.0s   -> DROPPED (RF_LOSS_BURST active)
+[05] D001 @ t=5.0s   -> DROPPED (RF_LOSS_BURST active)
+[06] D001 @ t=6.0s   -> PASSED (burst ended)
 ...
 
 [PoC Demo] Summary:
-  Total messages: 20
-  Passed: 15 (75%)
-  Dropped: 5 (25%)
-  Faults detected: RF_LOSS_BURST
+  Total messages: 40
+  Passed: ...
+  Dropped: ...
+  Fault activations: ...
 
-[PoC Demo] ✅ Fault injection working!
-[PoC Demo] ✅ Hexagonal architecture validated!
+[PoC Demo] OK: Fault injection working
+[PoC Demo] OK: Hexagonal architecture validated
 ```
 
 ## Key Learning Points
@@ -129,11 +144,12 @@ def test_drops_message_during_burst():
 # No MQTT? Use InMemoryBroker
 broker = InMemoryBroker()
 
-# Need MQTT? Swap in one line
-broker = MQTTBrokerAdapter("localhost", 1883)
+# Need MQTT? Swap in one line (then connect)
+broker = MQTTBrokerAdapter(broker_host="localhost", broker_port=1883, client_id="poc-demo")
+broker.connect()
 
-# Domain code unchanged!
-injector = FaultInjector(broker, registry)
+# Domain code unchanged: publish the same payloads to the same topics
+broker.publish("fleet/D001/telemetry", {"drone_id": "D001", "battery_pct": 97.2})
 ```
 
 ### 4. Add New Faults Easily
@@ -159,11 +175,10 @@ Run `pytest --cov=src --cov-report=html` to see coverage report.
 
 ## Next Steps After PoC
 
-1. ✅ Validated architecture works
-2. Add remaining 4 faults (GNSS, EKF, thrust, battery)
-3. Add MQTT adapter integration tests
-4. Refactor existing `fault_injector.py` to use this architecture
-5. Apply same pattern to planner + AI
+1. Validated architecture works
+2. Add integration tests around MQTT publish/subscribe (optional)
+3. Extend telemetry schema to include richer health/events
+4. Feed telemetry into `mission_control.py` and validate end-to-end behavior
 
 ## Time Breakdown
 

@@ -1,0 +1,64 @@
+/* V3 Mission Control - Dark Theme */
+:root {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #111827;
+  --bg-panel: #1a1f2e;
+  --bg-card: #1f2937;
+  --bg-hover: #374151;
+  --border: #2d3748;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent-cyan: #22d3ee;
+  --accent-magenta: #e879f9;
+  --accent-amber: #fbbf24;
+  --accent-green: #34d399;
+  --accent-red: #f87171;
+  --accent-blue: #60a5fa;
+  --accent-orange: #fb923c;
+  --role-leader: #22d3ee;
+  --role-wingman: #60a5fa;
+  --role-scout: #e879f9;
+  --role-point: #fbbf24;
+  --role-relay: #fb923c;
+  --role-guard: #34d399;
+  --role-cargo: #94a3b8;
+  --status-active: #34d399;
+  --status-disabled: #f87171;
+  --status-hold: #fbbf24;
+  --status-rtl: #fb923c;
+  --panel-width-left: 300px;
+  --panel-width-right: 320px;
+  --topbar-height: 48px;
+  --bottomstrip-height: 180px;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%; width: 100%;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+.leaflet-container { background: #0a0e17 !important; }
+.leaflet-tile-pane { filter: brightness(0.7) contrast(1.1) saturate(0.7); }
+.leaflet-control-zoom a {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border) !important;
+}
+.leaflet-control-attribution { display: none !important; }
+
+button { cursor: pointer; font-family: inherit; border: none; outline: none; }
+input, select {
+  font-family: inherit; background: var(--bg-secondary); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; font-size: 0.8rem;
+}
