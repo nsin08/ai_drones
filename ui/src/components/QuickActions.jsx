@@ -1,6 +1,5 @@
 import { useSelectionStore } from '../stores/selectionStore';
 import { useUIStore } from '../stores/uiStore';
-import { useCommandStore } from '../stores/commandStore';
 import { useMissionStore } from '../stores/missionStore';
 import { sendCommand, sendBulkCommand, reassignLeader } from '../api';
 import { COMMANDS_NEED_CONFIRM, ROLES } from '../constants';
@@ -37,7 +36,9 @@ export default function QuickActions() {
 
     if (needsConfirm) {
       const effect = ['DISABLE', 'LAND'].includes(cmd) ? 'will disable/land the drones' :
-        cmd === 'RETURN' ? 'will return drones to base' : 'will apply command';
+        cmd === 'RETURN' ? 'will return drones to base' :
+        cmd === 'FORCE_ARM' ? 'bypasses the normal pre-arm gate and should be used only if you understand the risk' :
+        'will apply command';
       showConfirm({
         title: `Confirm ${cmd}`,
         body: `Send ${cmd} to ${ids.length} drone${ids.length > 1 ? 's' : ''}? This ${effect}.`,
@@ -87,6 +88,8 @@ export default function QuickActions() {
         <button className="qa-btn qa-btn--disable" onClick={() => dispatch('DISABLE')}>DISABLE</button>
         <button className="qa-btn qa-btn--enable" onClick={() => dispatch('ENABLE')}>ENABLE</button>
         <button className="qa-btn qa-btn--arm" onClick={() => dispatch('ARM')}>ARM</button>
+        <button className="qa-btn qa-btn--disable" onClick={() => dispatch('DISARM')}>DISARM</button>
+        <button className="qa-btn qa-btn--return" onClick={() => dispatch('FORCE_ARM')}>FORCE ARM</button>
         <button className="qa-btn qa-btn--enable" onClick={() => dispatch('RESUME')}>RESUME</button>
       </div>
 

@@ -13,6 +13,9 @@ export default function MissionSetup() {
   const setSelectingHomeBase = useMissionStore((s) => s.setSelectingHomeBase);
   const selectedIds = useSelectionStore((s) => s.ids);
   const drones = useFleetStore((s) => s.drones);
+  const homeBaseLabel = homeBase?.lat != null && homeBase?.lon != null
+    ? `${homeBase.lat.toFixed(5)}, ${homeBase.lon.toFixed(5)}`
+    : 'Not set';
 
   const handlePlan = async () => {
     if (!missionType) return;
@@ -67,7 +70,7 @@ export default function MissionSetup() {
     try {
       await resetMission();
       resetPlan();
-    } catch (e) {
+    } catch {
       resetPlan(); // local reset anyway
     }
   };
@@ -77,7 +80,7 @@ export default function MissionSetup() {
       <div className="panel-section__title">Mission Setup</div>
 
       <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
-        Home Base: {homeBase?.lat?.toFixed(5)}, {homeBase?.lon?.toFixed(5)}
+        Home Base: {homeBaseLabel}
         <button
           style={{ marginLeft: 6, fontSize: '0.65rem', color: 'var(--accent-cyan)' }}
           onClick={() => setSelectingHomeBase(!selectingHomeBase)}

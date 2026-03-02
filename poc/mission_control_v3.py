@@ -48,7 +48,7 @@ HOME_BASE_LAT = float(os.getenv("HOME_BASE_LAT", "28.6139"))
 HOME_BASE_LON = float(os.getenv("HOME_BASE_LON", "77.2090"))
 HOME_BASE_ALT = float(os.getenv("HOME_BASE_ALT", "0"))
 
-VALID_COMMANDS = {"hold", "return", "disable", "enable", "arm", "disarm", "set_role", "land", "clear_mission", "resume"}
+VALID_COMMANDS = {"hold", "return", "disable", "enable", "arm", "force_arm", "disarm", "set_role", "land", "clear_mission", "resume"}
 VALID_MISSIONS = {"PATROL", "ESCORT", "PERIMETER"}
 
 # ---------------------------------------------------------------------------

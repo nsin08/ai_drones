@@ -55,12 +55,15 @@ DEFAULT_BROKER     = "localhost"
 DEFAULT_PORT_NUM   = 1883
 DEFAULT_HZ         = 1          # publish rate (1 Hz matches swarmsim default)
 HEARTBEAT_TIMEOUT  = 15
+FORCE_ARM_MAGIC    = 21196
 AUTO_PORTS         = ["COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
                       "COM9", "COM10", "COM11", "COM12"]
 AUTO_BAUDS         = [57600, 115200]
 SEV_NAMES          = {0: "EMERGENCY", 1: "ALERT", 2: "CRITICAL",
                       3: "ERROR", 4: "WARNING", 5: "NOTICE",
                       6: "INFO", 7: "DEBUG"}
+SUPPORTED_COMMANDS = {"ARM", "DISARM", "FORCE_ARM"}
+COMMAND_ACK_TOPIC  = "fleet/system/command_ack"
 
 
 # ─── Shared telemetry state ────────────────────────────────────────────────────
@@ -229,22 +232,25 @@ class MavlinkProcessor:
 class MqttPublisher:
     """Publishes telemetry snapshots to the AIP MQTT topics."""
 
-    def __init__(self, broker, port, drone_id, hz, state, lock):
+    def __init__(self, broker, port, drone_id, hz, state, lock, processor):
         self.broker   = broker
         self.port     = port
         self.drone_id = drone_id
         self.hz       = hz
         self.state    = state
         self.lock     = lock
+        self.processor = processor
         self.client   = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_connect    = self._on_connect
         self.client.on_disconnect = self._on_disconnect
+        self.client.on_message    = self._on_message
         self._connected = False
 
     def _on_connect(self, client, userdata, flags, reason_code, props=None):
         rc = reason_code if isinstance(reason_code, int) else reason_code.value
         if rc == 0:
             self._connected = True
+            client.subscribe(self._command_topic())
             print(f"  ✅  MQTT connected  broker={self.broker}:{self.port}")
         else:
             print(f"  ❌  MQTT connect failed  rc={rc}")
@@ -252,6 +258,11 @@ class MqttPublisher:
     def _on_disconnect(self, client, userdata, disconnect_flags, reason_code, props=None):
         self._connected = False
         print(f"  ⚠️   MQTT disconnected (rc={reason_code}), reconnecting...")
+
+    def _on_message(self, client, userdata, msg):
+        if msg.topic != self._command_topic():
+            return
+        self._handle_command_message(msg.payload)
 
     def connect(self):
         try:
@@ -266,6 +277,126 @@ class MqttPublisher:
         except Exception as e:
             print(f"  ❌  MQTT broker unreachable at {self.broker}:{self.port}: {e}")
             return False
+
+    def _command_topic(self):
+        return f"fleet/{self.drone_id}/command"
+
+    def _handle_command_message(self, raw_payload):
+        try:
+            payload = json.loads(raw_payload.decode() if isinstance(raw_payload, bytes) else raw_payload)
+        except Exception as e:
+            self._publish_command_ack({
+                "cmd_id": None,
+                "drone_id": self.drone_id,
+                "command": "UNKNOWN",
+                "result": "FAILED",
+                "detail": f"invalid JSON payload: {e}",
+                "timestamp": time.time(),
+            })
+            return
+
+        ack = self._execute_command(payload)
+        self._publish_command_ack(ack)
+
+    def _execute_command(self, payload):
+        command = self._normalize_command(payload)
+        cmd_id = payload.get("cmd_id")
+        payload_drone_id = payload.get("drone_id")
+
+        if payload_drone_id and payload_drone_id != self.drone_id:
+            return self._ack_payload(
+                cmd_id=cmd_id,
+                command=command or "UNKNOWN",
+                result="FAILED",
+                detail=f"wrong target drone_id={payload_drone_id}",
+            )
+
+        if command not in SUPPORTED_COMMANDS:
+            return self._ack_payload(
+                cmd_id=cmd_id,
+                command=command or "UNKNOWN",
+                result="FAILED",
+                detail=f"unsupported command: {command}",
+            )
+
+        force = command == "FORCE_ARM"
+        arm = command in {"ARM", "FORCE_ARM"}
+
+        with self.lock:
+            current_armed = bool(self.state["armed"])
+            prearm_ok = bool(self.state["prearm_ok"])
+
+        if arm and current_armed:
+            return self._ack_payload(cmd_id=cmd_id, command=command, result="OK", detail="already armed")
+        if (not arm) and (not current_armed):
+            return self._ack_payload(cmd_id=cmd_id, command=command, result="OK", detail="already disarmed")
+        if arm and (not force) and (not prearm_ok):
+            return self._ack_payload(
+                cmd_id=cmd_id,
+                command=command,
+                result="FAILED",
+                detail="prearm checks failed; use FORCE_ARM only if you accept the risk",
+            )
+
+        try:
+            self._send_arm_disarm(arm=arm, force=force)
+            detail = "force arm command sent" if force else f"{command.lower()} command sent"
+            self._append_status_log(f"[NOTICE] MQTT command {command} accepted")
+            return self._ack_payload(cmd_id=cmd_id, command=command, result="OK", detail=detail)
+        except Exception as e:
+            self._append_status_log(f"[ERROR] MQTT command {command} failed: {e}")
+            return self._ack_payload(cmd_id=cmd_id, command=command, result="FAILED", detail=str(e))
+
+    @staticmethod
+    def _normalize_command(payload):
+        command = str(payload.get("command") or "").strip().upper()
+        params = payload.get("params") or {}
+        if command == "ARM" and params.get("force"):
+            return "FORCE_ARM"
+        return command
+
+    def _send_arm_disarm(self, *, arm, force):
+        conn = self.processor.conn
+        if conn is None:
+            raise RuntimeError("MAVLink connection not ready")
+
+        param1 = 1 if arm else 0
+        param2 = FORCE_ARM_MAGIC if force else 0
+        conn.mav.command_long_send(
+            conn.target_system,
+            conn.target_component,
+            mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+            0,
+            param1,
+            param2,
+            0,
+            0,
+            0,
+            0,
+            0,
+        )
+
+    def _publish_command_ack(self, payload):
+        if not self._connected:
+            return
+        self.client.publish(COMMAND_ACK_TOPIC, json.dumps(payload))
+
+    def _ack_payload(self, *, cmd_id, command, result, detail):
+        return {
+            "cmd_id": cmd_id,
+            "drone_id": self.drone_id,
+            "command": command,
+            "result": result,
+            "detail": detail,
+            "timestamp": time.time(),
+        }
+
+    def _append_status_log(self, entry):
+        with self.lock:
+            log = self.state["status_log"]
+            if entry not in log:
+                log.insert(0, entry)
+                self.state["status_log"] = log[:10]
 
     def _telemetry_payload(self):
         """Build the payload that matches the swarmsim schema."""
@@ -386,6 +517,7 @@ def print_status(state, lock, drone_id, broker, hz, start_time):
     print()
     print(f"  MQTT publishing to:  fleet/{drone_id}/telemetry")
     print(f"                       fleet/{drone_id}/status")
+    print(f"  MQTT commands:       fleet/{drone_id}/command")
     print()
     print("  ── Telemetry ────────────────────────────────────────────────")
     print(f"  Position    lat={lat}  lon={lon}  alt={alt}")
@@ -422,7 +554,7 @@ class DroneSession:
         self.start_time = None
         self.connected  = False
         self.proc = MavlinkProcessor(port, baud, self.state, self.lock)
-        self.pub  = MqttPublisher(broker, mqtt_port, drone_id, hz, self.state, self.lock)
+        self.pub  = MqttPublisher(broker, mqtt_port, drone_id, hz, self.state, self.lock, self.proc)
 
     def connect(self) -> bool:
         if not self.proc.connect():

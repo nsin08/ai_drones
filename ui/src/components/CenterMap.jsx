@@ -57,23 +57,68 @@ function MapClickHandler() {
   return null;
 }
 
-function MapViewUpdater({ homeBase }) {
+function MapViewUpdater({ homeBase, selectedDrone, firstLiveDrone }) {
   const map = useMap();
+  const hasCenteredOnLiveRef = useRef(false);
+  const lastSelectedFixRef = useRef('');
+
   useEffect(() => {
+    if (selectedDrone?.latitude == null || selectedDrone?.longitude == null) {
+      lastSelectedFixRef.current = '';
+      return;
+    }
+    const nextFix = [
+      selectedDrone.drone_id,
+      selectedDrone.latitude.toFixed(6),
+      selectedDrone.longitude.toFixed(6),
+    ].join(':');
+    if (nextFix === lastSelectedFixRef.current) return;
+    lastSelectedFixRef.current = nextFix;
+    hasCenteredOnLiveRef.current = true;
+    map.setView([selectedDrone.latitude, selectedDrone.longitude], map.getZoom(), { animate: false });
+  }, [map, selectedDrone?.drone_id, selectedDrone?.latitude, selectedDrone?.longitude]);
+
+  useEffect(() => {
+    if (selectedDrone?.drone_id) return;
+    if (hasCenteredOnLiveRef.current) return;
+    if (firstLiveDrone?.latitude == null || firstLiveDrone?.longitude == null) return;
+    hasCenteredOnLiveRef.current = true;
+    map.setView([firstLiveDrone.latitude, firstLiveDrone.longitude], map.getZoom(), { animate: false });
+  }, [map, selectedDrone?.drone_id, firstLiveDrone?.drone_id, firstLiveDrone?.latitude, firstLiveDrone?.longitude]);
+
+  useEffect(() => {
+    if (selectedDrone?.drone_id) return;
+    if (hasCenteredOnLiveRef.current) return;
     if (!homeBase) return;
     const { lat, lon } = homeBase;
     if (lat != null && lon != null) {
       map.setView([lat, lon], map.getZoom(), { animate: false });
     }
-  }, [map, homeBase?.lat, homeBase?.lon]);
+  }, [map, homeBase, homeBase?.lat, homeBase?.lon, selectedDrone?.drone_id]);
   return null;
 }
 
 export default function CenterMap() {
   const drones = useFleetStore((s) => s.drones);
-  const { missionType, missionState, planWaypoints, planGeofence, planAssetRoute, homeBase } = useMissionStore();
+  const { missionType, planWaypoints, planGeofence, planAssetRoute, homeBase } = useMissionStore();
+  const selected = useSelectionStore((s) => s.selected);
   const toggle = useSelectionStore((s) => s.toggle);
-  const showDrones = ['ACTIVE', 'PAUSED', 'ABORTED', 'COMPLETED'].includes(missionState);
+  const droneList = useMemo(() => Object.values(drones), [drones]);
+  const selectedDrone = useMemo(
+    () => droneList.find((d) => selected.has(d.drone_id) && d.latitude != null && d.longitude != null),
+    [droneList, selected],
+  );
+  const firstLiveDrone = useMemo(
+    () => droneList.find((d) => d.latitude != null && d.longitude != null),
+    [droneList],
+  );
+  const initialCenter = selectedDrone
+    ? [selectedDrone.latitude, selectedDrone.longitude]
+    : firstLiveDrone
+      ? [firstLiveDrone.latitude, firstLiveDrone.longitude]
+      : homeBase?.lat != null && homeBase?.lon != null
+        ? [homeBase.lat, homeBase.lon]
+        : MAP_CENTER;
   const tileSources = useMemo(() => ([
     TILE_URL,
     'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -86,7 +131,7 @@ export default function CenterMap() {
 
   return (
     <div className="center-map">
-      <MapContainer center={MAP_CENTER} zoom={MAP_ZOOM} style={{ height: '100%', width: '100%' }}>
+      <MapContainer center={initialCenter} zoom={MAP_ZOOM} style={{ height: '100%', width: '100%' }}>
         <TileLayer
           key={tileUrl}
           url={tileUrl}
@@ -105,7 +150,7 @@ export default function CenterMap() {
             },
           }}
         />
-        <MapViewUpdater homeBase={homeBase} />
+        <MapViewUpdater homeBase={homeBase} selectedDrone={selectedDrone} firstLiveDrone={firstLiveDrone} />
         <MapClickHandler />
 
         {/* Home base marker */}
@@ -129,7 +174,7 @@ export default function CenterMap() {
         )}
 
         {/* Drone markers */}
-        {showDrones && Object.values(drones).map((d) => {
+        {droneList.map((d) => {
           if (d.latitude == null || d.longitude == null) return null;
           const role = d.mission_role || d.current_role || 'UNKNOWN';
           const color = ROLE_COLORS[role] || ROLE_COLORS.UNKNOWN;
@@ -153,7 +198,7 @@ export default function CenterMap() {
         })}
 
         {/* Trails */}
-        {showDrones && Object.values(drones).map((d) => {
+        {droneList.map((d) => {
           if (!d.trail || d.trail.length < 2) return null;
           const role = d.mission_role || d.current_role || 'UNKNOWN';
           const color = ROLE_COLORS[role] || ROLE_COLORS.UNKNOWN;

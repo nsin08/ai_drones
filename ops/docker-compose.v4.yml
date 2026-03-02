@@ -1,0 +1,76 @@
+#
+# Mission Control v4 - Hardware-Oriented Stack
+# Usage: docker compose -f docker-compose.v4.yml up --build
+#
+# Public entrypoint:
+#   - http://localhost:5000 -> v4 UI (Vite dev server)
+#
+# Internal only:
+#   - mission-control backend remains on the Docker network and is proxied by the UI
+#
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mosquitto-broker-v4
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto.conf:/mosquitto/config/mosquitto.conf
+      - mosquitto_data:/mosquitto/data
+      - mosquitto_logs:/mosquitto/log
+    environment:
+      TZ: UTC
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-h", "localhost", "-t", "$$SYS/broker/uptime", "-C", "1", "-W", "3"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - fleet-network
+
+  mission-control:
+    build:
+      context: ..
+      dockerfile: poc/Dockerfile
+    container_name: mission-control-v4-backend
+    expose:
+      - "5000"
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - INVENTORY_URL=http://host.docker.internal:8001
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - fleet-network
+
+  ui-v4:
+    image: node:20-alpine
+    container_name: mission-control-v4-ui
+    working_dir: /app/ui
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    ports:
+      - "5000:5173"
+    environment:
+      - VITE_PROXY_TARGET=http://mission-control:5000
+    volumes:
+      - ..:/app
+      - ui_node_modules:/app/ui/node_modules
+    depends_on:
+      mission-control:
+        condition: service_started
+    networks:
+      - fleet-network
+
+volumes:
+  mosquitto_data:
+  mosquitto_logs:
+  ui_node_modules:
+
+networks:
+  fleet-network:
+    driver: bridge

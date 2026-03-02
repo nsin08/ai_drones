@@ -41,7 +41,7 @@ export const ROLES = ['LEADER', 'POINT_MAN', 'WINGMAN', 'SCOUT', 'RELAY', 'GUARD
 
 export const MISSION_TYPES = ['PATROL', 'PERIMETER', 'ESCORT'];
 
-export const COMMANDS_NEED_CONFIRM = ['DISABLE', 'LAND', 'RETURN', 'RTL', 'CLEAR_MISSION'];
+export const COMMANDS_NEED_CONFIRM = ['DISABLE', 'LAND', 'RETURN', 'RTL', 'CLEAR_MISSION', 'FORCE_ARM'];
 
 export const TILE_URL =
   import.meta.env.VITE_MAP_TILE_URL ||

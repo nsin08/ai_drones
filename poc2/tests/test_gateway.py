@@ -13,6 +13,7 @@ No hardware or MQTT broker required — all offline/unit tests.
 import sys
 import threading
 import time
+import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -22,7 +23,38 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT / "poc2"))
 
+fake_mavutil = types.SimpleNamespace(
+    mavlink=types.SimpleNamespace(
+        MAV_MODE_FLAG_SAFETY_ARMED=128,
+        MAV_CMD_COMPONENT_ARM_DISARM=400,
+        enums={"MAV_TYPE": {}},
+    ),
+    mode_string_v10=lambda _msg: "STABILIZE",
+)
+fake_pymavlink = types.ModuleType("pymavlink")
+fake_pymavlink.mavutil = fake_mavutil
+sys.modules.setdefault("pymavlink", fake_pymavlink)
+
+fake_paho = types.ModuleType("paho")
+fake_paho_mqtt = types.ModuleType("paho.mqtt")
+fake_paho_mqtt_client = types.ModuleType("paho.mqtt.client")
+
+
+class _FakeClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+
+fake_paho_mqtt_client.Client = _FakeClient
+fake_paho_mqtt_client.CallbackAPIVersion = types.SimpleNamespace(VERSION2=object())
+fake_paho.mqtt = fake_paho_mqtt
+fake_paho_mqtt.client = fake_paho_mqtt_client
+sys.modules.setdefault("paho", fake_paho)
+sys.modules.setdefault("paho.mqtt", fake_paho_mqtt)
+sys.modules.setdefault("paho.mqtt.client", fake_paho_mqtt_client)
+
 from drone_gateway import (
+    FORCE_ARM_MAGIC,
     _empty_state,
     MavlinkProcessor,
     MqttPublisher,
@@ -285,6 +317,70 @@ class TestTelemetryPayload:
         payload = pub._telemetry_payload()
         assert payload["battery_pct"] == 77
         assert payload["battery"] == 77       # backward-compat alias
+
+
+class TestCommandExecution:
+
+    def _command_pub(self, state: dict | None = None) -> MqttPublisher:
+        pub = MqttPublisher.__new__(MqttPublisher)
+        pub.drone_id = "HW-001"
+        pub.state = state or _empty_state()
+        pub.lock = threading.Lock()
+        pub._connected = True
+        pub.client = MagicMock()
+        pub.processor = MagicMock()
+        pub.processor.conn = MagicMock()
+        pub.processor.conn.target_system = 1
+        pub.processor.conn.target_component = 1
+        pub.processor.conn.mav = MagicMock()
+        return pub
+
+    def test_arm_rejected_when_prearm_fails(self):
+        state = _empty_state()
+        state["prearm_ok"] = False
+        pub = self._command_pub(state)
+
+        ack = pub._execute_command({"cmd_id": "1", "command": "ARM", "drone_id": "HW-001"})
+
+        assert ack["result"] == "FAILED"
+        assert "prearm checks failed" in ack["detail"]
+        pub.processor.conn.mav.command_long_send.assert_not_called()
+
+    def test_force_arm_bypasses_prearm_gate(self):
+        state = _empty_state()
+        state["prearm_ok"] = False
+        pub = self._command_pub(state)
+
+        ack = pub._execute_command({"cmd_id": "2", "command": "FORCE_ARM", "drone_id": "HW-001"})
+
+        assert ack["result"] == "OK"
+        args = pub.processor.conn.mav.command_long_send.call_args.args
+        assert args[4] == 1
+        assert args[5] == FORCE_ARM_MAGIC
+
+    def test_disarm_sends_zero_param(self):
+        state = _empty_state()
+        state["armed"] = True
+        pub = self._command_pub(state)
+
+        ack = pub._execute_command({"cmd_id": "3", "command": "DISARM", "drone_id": "HW-001"})
+
+        assert ack["result"] == "OK"
+        args = pub.processor.conn.mav.command_long_send.call_args.args
+        assert args[4] == 0
+        assert args[5] == 0
+
+    def test_arm_with_force_param_normalizes_to_force_arm(self):
+        pub = self._command_pub()
+
+        assert pub._normalize_command({"command": "ARM", "params": {"force": True}}) == "FORCE_ARM"
+
+    def test_handle_command_message_publishes_ack(self):
+        pub = self._command_pub()
+
+        pub._handle_command_message(b'{"cmd_id":"4","command":"ARM","drone_id":"HW-001"}')
+
+        pub.client.publish.assert_called_once()
 
 
 # ─── parse_ports_arg tests ────────────────────────────────────────────────────
