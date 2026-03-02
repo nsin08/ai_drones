@@ -3,7 +3,7 @@
 **Created:** 2026-03-02  
 **Last Updated:** 2026-03-02  
 **Branch Base:** `feature/04-mission-control-v4`  
-**Current Status:** ~85% complete (W11 ✅ done, W12 ✅ done, W13 ✅ done, W14 ✅ done, W15–W16 pending)  
+**Current Status:** ~95% complete (W11 ✅ done, W12 ✅ done, W13 ✅ done, W14 ✅ done, W15 ✅ done, W16 pending)  
 **Reference Plan:** `d:\refrences\MISSION_CONTROL_V4_PLAN.md`  
 **Reference Summary:** `d:\refrences\V4_QUICK_SUMMARY.md`
 
@@ -82,7 +82,7 @@
 | **W12** | 2026-03-16 — 2026-03-22 | Command Retry + Mission Model | G5, G6 | ✅ DONE |
 | **W13** | 2026-03-23 — 2026-03-29 | Health Scoring + Real-Time Feedback | G7, G8 | ✅ DONE |
 | **W14** | 2026-03-30 — 2026-04-05 | Auth + Environment Separation | G9, G10 | ✅ COMPLETE |
-| **W15** | 2026-04-06 — 2026-04-12 | Reliability + Interactive UI | G11, G12 | pending |
+| **W15** | 2026-04-06 — 2026-04-12 | Reliability + Interactive UI | G11, G12 | ✅ done |
 | **W16** | 2026-04-13 — 2026-04-19 | Integration Testing + Docs | G13, G14 | pending |
 
 ---
@@ -728,36 +728,36 @@ class CircuitBreaker:
 ### W15 Implementation Checklist
 
 #### Circuit Breaker (G11)
-- [ ] Create `poc/v4_mission_control/infra/mqtt_client.py` with reconnect backoff
-- [ ] Create `poc/v4_mission_control/infra/circuit_breaker.py` with 3-strike fail-fast
-- [ ] Wrap Inventory HTTP calls in `CircuitBreaker`
-- [ ] Add `SERVICE_STATUS_EVENT` to `schemas/socket_events.py`
-- [ ] Broadcast `SERVICE_STATUS_EVENT` on MQTT connect/disconnect
-- [ ] Update `GET /api/health` to include `mqtt_connected` and `inventory_available` fields
-- [ ] Serve `last_known_drone_states` from DB cache when real-time unavailable
+- [x] Create `poc/v4_mission_control/infra/mqtt_client.py` with reconnect backoff
+- [x] Create `poc/v4_mission_control/infra/circuit_breaker.py` with 3-strike fail-fast
+- [x] Wrap Inventory HTTP calls in `CircuitBreaker`
+- [x] Add `SERVICE_STATUS_EVENT` to `schemas/socket_events.py` (pre-existing)
+- [x] Broadcast `SERVICE_STATUS_EVENT` on MQTT connect/disconnect
+- [x] Update `GET /api/health` to include `mqtt_connected` and `inventory_available` fields
+- [x] Serve `last_known_drone_states` from DB cache when real-time unavailable
 
 #### Interactive UI (G12)
-- [ ] Install `leaflet` + `react-leaflet` in `ui/`
-- [ ] Create `MissionBuilderMap.jsx` with click-to-add-waypoint
-- [ ] Create `WaypointList.jsx` with reorder + delete
-- [ ] Create `GeofenceEditor.jsx` (polygon draw)
-- [ ] Create `FormationSelector.jsx` (V / Line / Circle enum)
-- [ ] Create `MissionBuilderPage.jsx` assembling all components
-- [ ] Wire `MissionBuilderPage` into `ui/src/v4/routes.jsx`
-- [ ] On submit: validate waypoints inside geofence; POST to `/api/missions`
-- [ ] Show success/error toast on submission result
+- [x] Install `leaflet` + `react-leaflet` in `ui/` (pre-existing)
+- [x] Create `MissionBuilderMap.jsx` with click-to-add-waypoint
+- [x] Create `WaypointList.jsx` with reorder + delete
+- [x] Create `GeofenceEditor.jsx` (polygon draw)
+- [x] Create `FormationSelector.jsx` (V / Line / Circle enum)
+- [x] Create `MissionBuilderPage.jsx` assembling all components
+- [x] Wire `MissionBuilderPage` into `ui/src/v4/routes.jsx`
+- [x] On submit: validate waypoints inside geofence; POST to `/api/missions`
+- [x] Show success/error toast on submission result
 
 #### Tests
-- [ ] `test_circuit_breaker.py` — 3 failures → OPEN; request after reset_timeout → HALF-OPEN
-- [ ] `test_mqtt_reconnect.py` — mock broker down; verify backoff schedule fires
-- [ ] Playwright/React Testing Library: `MissionBuilderMap` renders; click adds waypoint to list
-- [ ] `test_mission_builder_submit.py` — form submit POSTs correct payload
+- [x] `test_circuit_breaker.py` — 3 failures → OPEN; request after reset_timeout → HALF-OPEN (29 tests)
+- [x] `test_mqtt_reconnect.py` — mock broker down; verify backoff schedule fires (22 tests)
+- [ ] Playwright/React Testing Library: `MissionBuilderMap` renders; click adds waypoint to list (deferred W16)
+- [ ] `test_mission_builder_submit.py` — form submit POSTs correct payload (deferred W16)
 
 #### DoD (S4-009 + S4-006)
-- [ ] MQTT broker crash → UI shows "MQTT: OFFLINE (cached)" badge; backend continues serving cached state
-- [ ] Inventory 3 failures → circuit opens; `/api/fleet` returns cached data with warning
-- [ ] Can create + save a PATROL mission with 5 waypoints from UI
-- [ ] Waypoint outside geofence shows validation error before submit
+- [x] MQTT broker crash → UI shows "MQTT: OFFLINE (cached)" badge; backend continues serving cached state
+- [x] Inventory 3 failures → circuit opens; `/api/fleet` returns cached data with warning
+- [x] Can create + save a PATROL mission with 5 waypoints from UI
+- [x] Waypoint outside geofence shows validation error before submit
 
 ---
 
