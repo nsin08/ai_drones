@@ -5,10 +5,9 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, String
-from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from .base import Base, utc_now
+from .base import Base, JsonBType, UuidType, utc_now
 
 
 class Event(Base):
@@ -17,7 +16,7 @@ class Event(Base):
     __tablename__ = "events"
 
     event_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        UuidType,
         primary_key=True,
         default=uuid.uuid4,
     )
@@ -26,12 +25,12 @@ class Event(Base):
     aggregate_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     drone_id: Mapped[str | None] = mapped_column(String(64), index=True)
     command_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+        UuidType,
         ForeignKey("commands.cmd_id"),
     )
     mission_id: Mapped[str | None] = mapped_column(String(64), index=True)
     severity: Mapped[str | None] = mapped_column(String(16), index=True)
-    payload_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JsonBType, default=dict, nullable=False)
     requested_by: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

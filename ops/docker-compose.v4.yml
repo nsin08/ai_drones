@@ -29,6 +29,25 @@ services:
     networks:
       - fleet-network
 
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres-v4
+    environment:
+      POSTGRES_USER: v4
+      POSTGRES_PASSWORD: v4
+      POSTGRES_DB: missioncontrol
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_v4_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U v4 -d missioncontrol"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - fleet-network
+
   mission-control:
     build:
       context: ..
@@ -40,8 +59,12 @@ services:
       - MQTT_HOST=mosquitto
       - MQTT_PORT=1883
       - INVENTORY_URL=http://host.docker.internal:8001
+      - MC_V4_DATABASE_URL=postgresql+psycopg2://v4:v4@postgres:5432/missioncontrol
+      - MC_V4_USE_DATABASE=true
     depends_on:
       mosquitto:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -70,6 +93,7 @@ volumes:
   mosquitto_data:
   mosquitto_logs:
   ui_node_modules:
+  postgres_v4_data:
 
 networks:
   fleet-network:
