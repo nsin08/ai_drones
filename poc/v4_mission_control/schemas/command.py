@@ -76,6 +76,7 @@ class CommandHistoryItem(BaseModel):
     status: CommandStatus
     attempt_count: int
     created_at: str
+    requested_by: str | None = None
 
 
 class CommandHistoryResponse(BaseModel):

@@ -25,12 +25,30 @@ class Settings(BaseSettings):
     USE_DATABASE: bool = False  # set True in docker-compose; False keeps in-memory repos for tests
     EVENT_SNAPSHOT_INTERVAL: int = 100  # write DroneSnapshot every N events per drone
 
+    # Environment / MQTT routing (W14)
+    DRONE_ENV: str = "ALL"  # SIM | HARDWARE | ALL
+    MQTT_TOPIC_PREFIX: str = "fleet/sim"  # auto-derived; use fleet/{env} convention
+
+    # Auth (W14) — False = bypass auth (legacy / test mode); True = require JWT Bearer
+    AUTH_ENABLED: bool = False
+    JWT_SECRET_KEY: str = "dev-secret-change-in-production"  # override via MC_V4_JWT_SECRET_KEY
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60
+
     @field_validator("ENVIRONMENT")
     @classmethod
     def normalize_environment(cls, value: str) -> str:
         normalized = value.strip().upper()
         if normalized not in {"SIM", "HARDWARE"}:
             raise ValueError("ENVIRONMENT must be SIM or HARDWARE")
+        return normalized
+
+    @field_validator("DRONE_ENV")
+    @classmethod
+    def normalize_drone_env(cls, value: str) -> str:
+        normalized = value.strip().upper()
+        if normalized not in {"SIM", "HARDWARE", "ALL"}:
+            raise ValueError("DRONE_ENV must be SIM, HARDWARE, or ALL")
         return normalized
 
 

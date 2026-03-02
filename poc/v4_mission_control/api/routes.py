@@ -5,7 +5,12 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
+from ..auth.acl import check_command_permission
+from ..auth.dependencies import get_current_operator
+from ..auth.jwt import create_access_token
+from ..auth.operator_store import ANONYMOUS_ADMIN, OperatorContext
 from ..config import Settings
 from ..schemas.command import (
     CommandAcceptedResponse,
@@ -33,8 +38,75 @@ router = APIRouter(prefix="/api")
 ws_router = APIRouter()
 
 
+# ---------------------------------------------------------------------------
+# Auth schemas (inline — no dedicated module needed for MVP)
+# ---------------------------------------------------------------------------
+
+class _LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class _TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    operator_id: str
+    username: str
+    role: str
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+
+@router.post("/auth/token", response_model=_TokenResponse)
+def login(
+    body: _LoginRequest,
+    settings: Settings = Depends(get_v4_settings),
+    runtime: ServiceContainer = Depends(get_runtime),
+) -> _TokenResponse:
+    """Exchange username + password for a JWT access token."""
+
+    operator = runtime.operator_store.authenticate(body.username, body.password)
+    if operator is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    token = create_access_token(
+        settings=settings,
+        operator_id=operator.operator_id,
+        username=operator.username,
+        role=operator.role,
+        allowed_drones=operator.allowed_drones,
+    )
+    return _TokenResponse(
+        access_token=token,
+        operator_id=operator.operator_id,
+        username=operator.username,
+        role=operator.role,
+    )
+
+
+@router.get("/auth/me", response_model=dict)
+def read_me(
+    operator: OperatorContext = Depends(get_current_operator),
+) -> dict:
+    """Return the identity of the currently authenticated operator."""
+
+    return {
+        "operator_id": operator.operator_id,
+        "username": operator.username,
+        "role": operator.role,
+        "allowed_drones": operator.allowed_drones,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -113,8 +185,16 @@ def read_drone_health(
 def submit_command(
     payload: CommandRequest,
     runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
 ) -> CommandAcceptedResponse | JSONResponse:
     """Submit a command through the safe command path."""
+
+    # ACL: OBSERVER cannot command; PILOT is restricted to assigned drones.
+    check_command_permission(operator, payload.drone_id)
+
+    # Audit trail: stamp requested_by from the authenticated operator.
+    if operator is not ANONYMOUS_ADMIN or payload.requested_by is None:
+        payload = payload.model_copy(update={"requested_by": operator.username})
 
     result = runtime.command_service.submit_command(payload)
     if isinstance(result, CommandRejectedResponse):

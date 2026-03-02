@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from functools import lru_cache
 
+from ..auth.operator_store import InMemoryOperatorStore
 from ..config import Settings, get_settings
 from ..repos.command_repo import InMemoryCommandRepository, SQLCommandRepository
 from ..repos.drone_repo import DroneRepository, InMemoryDroneRepository
@@ -31,6 +32,7 @@ class ServiceContainer:
     event_replay_service: EventReplayService
     health_service: HealthService
     ws_manager: WebSocketManager
+    operator_store: InMemoryOperatorStore
 
 
 @lru_cache(maxsize=1)
@@ -53,6 +55,9 @@ def get_service_container() -> ServiceContainer:
         event_repo = InMemoryEventRepository()
         mission_repo = InMemoryMissionRepository()
         drone_repo = InMemoryDroneRepository()
+
+    # ---- Auth stores -------------------------------------------------------
+    operator_store = InMemoryOperatorStore()
 
     # ---- WebSocket manager -----------------------------------------------
     ws_manager = WebSocketManager()
@@ -89,4 +94,5 @@ def get_service_container() -> ServiceContainer:
         event_replay_service=event_replay_service,
         health_service=health_service,
         ws_manager=ws_manager,
+        operator_store=operator_store,
     )
