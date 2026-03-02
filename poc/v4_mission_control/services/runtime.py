@@ -5,10 +5,13 @@ from functools import lru_cache
 
 from ..config import Settings, get_settings
 from ..repos.command_repo import InMemoryCommandRepository, SQLCommandRepository
+from ..repos.drone_repo import DroneRepository, InMemoryDroneRepository
 from ..repos.event_repo import InMemoryEventRepository, SQLEventRepository
 from ..repos.mission_repo import InMemoryMissionRepository, SQLMissionRepository
+from ..ws.manager import WebSocketManager
 from .commands import CommandService
 from .event_replay import EventReplayService
+from .health_service import HealthService
 from .mission_service import MissionService
 from .preflight import PreflightService
 
@@ -21,10 +24,13 @@ class ServiceContainer:
     command_repo: InMemoryCommandRepository | SQLCommandRepository
     event_repo: InMemoryEventRepository | SQLEventRepository
     mission_repo: InMemoryMissionRepository | SQLMissionRepository
+    drone_repo: InMemoryDroneRepository | DroneRepository
     preflight_service: PreflightService
     command_service: CommandService
     mission_service: MissionService
     event_replay_service: EventReplayService
+    health_service: HealthService
+    ws_manager: WebSocketManager
 
 
 @lru_cache(maxsize=1)
@@ -36,35 +42,51 @@ def get_service_container() -> ServiceContainer:
     """
     settings = get_settings()
 
+    # ---- Repositories ----------------------------------------------------
     if settings.USE_DATABASE:
         command_repo: InMemoryCommandRepository | SQLCommandRepository = SQLCommandRepository()
         event_repo: InMemoryEventRepository | SQLEventRepository = SQLEventRepository()
         mission_repo: InMemoryMissionRepository | SQLMissionRepository = SQLMissionRepository()
+        drone_repo: InMemoryDroneRepository | DroneRepository = DroneRepository()
     else:
         command_repo = InMemoryCommandRepository()
         event_repo = InMemoryEventRepository()
         mission_repo = InMemoryMissionRepository()
+        drone_repo = InMemoryDroneRepository()
 
+    # ---- WebSocket manager -----------------------------------------------
+    ws_manager = WebSocketManager()
+
+    # ---- Services --------------------------------------------------------
     preflight_service = PreflightService(settings=settings)
     command_service = CommandService(
         settings=settings,
         command_repo=command_repo,
         event_repo=event_repo,
         preflight_service=preflight_service,
+        ws_manager=ws_manager,
     )
     mission_service = MissionService(
         mission_repo=mission_repo,
         event_repo=event_repo,
     )
     event_replay_service = EventReplayService()
+    health_service = HealthService(
+        settings=settings,
+        drone_repo=drone_repo,
+        ws_manager=ws_manager,
+    )
 
     return ServiceContainer(
         settings=settings,
         command_repo=command_repo,
         event_repo=event_repo,
         mission_repo=mission_repo,
+        drone_repo=drone_repo,
         preflight_service=preflight_service,
         command_service=command_service,
         mission_service=mission_service,
         event_replay_service=event_replay_service,
+        health_service=health_service,
+        ws_manager=ws_manager,
     )

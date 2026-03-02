@@ -1,8 +1,10 @@
 """Safe command path — W10 foundation + W12 retry loop and ACK/NACK."""
 
+from __future__ import annotations
+
 import threading
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from poc.src.ports.message_broker import MessageBroker
@@ -20,6 +22,9 @@ from ..schemas.command import (
 from ..schemas.preflight import PreflightResponse
 from ..schemas.socket_events import COMMAND_STATUS_EVENT
 from .preflight import PreflightService
+
+if TYPE_CHECKING:
+    from ..ws.manager import WebSocketManager
 
 # Terminal states — retry loop stops when a command reaches one of these.
 _TERMINAL_STATUSES = {
@@ -46,12 +51,14 @@ class CommandService:
         event_repo: InMemoryEventRepository | SQLEventRepository,
         preflight_service: PreflightService,
         broker: MessageBroker | None = None,
+        ws_manager: WebSocketManager | None = None,
     ) -> None:
         self._settings = settings
         self._command_repo = command_repo
         self._event_repo = event_repo
         self._preflight_service = preflight_service
         self._broker = broker
+        self._ws = ws_manager
 
     def submit_command(
         self,
@@ -95,6 +102,7 @@ class CommandService:
                 },
                 requested_by=record.requested_by,
             )
+            self._broadcast_command_status(record)
             return record.as_rejected_response()
 
         record = self._command_repo.create(
@@ -120,6 +128,7 @@ class CommandService:
             requested_by=record.requested_by,
         )
         self._publish_hook(record)
+        self._broadcast_command_status(record)
 
         if start_retry_thread:
             t = threading.Thread(
@@ -159,6 +168,7 @@ class CommandService:
 
             # Not ACKed — mark retrying and emit event
             self._command_repo.mark_retrying(cmd_id, attempt=attempt)
+            retrying_rec = self._command_repo.get(cmd_id)
             self._event_repo.append(
                 event_type="COMMAND_RETRYING",
                 aggregate_type="COMMAND",
@@ -172,6 +182,8 @@ class CommandService:
                 },
                 requested_by=current.requested_by,
             )
+            if retrying_rec:
+                self._broadcast_command_status(retrying_rec)
 
             # Sleep backoff before next attempt
             if attempt <= len(backoffs):
@@ -181,6 +193,7 @@ class CommandService:
         current = self._command_repo.get(cmd_id)
         if current and current.status not in _TERMINAL_STATUSES:
             self._command_repo.mark_timed_out(cmd_id)
+            timed_out_rec = self._command_repo.get(cmd_id)
             self._event_repo.append(
                 event_type="COMMAND_TIMED_OUT",
                 aggregate_type="COMMAND",
@@ -195,6 +208,8 @@ class CommandService:
                 },
                 requested_by=current.requested_by,
             )
+            if timed_out_rec:
+                self._broadcast_command_status(timed_out_rec)
 
     # ------------------------------------------------------------------
     # ACK / NACK (W12)
@@ -228,6 +243,8 @@ class CommandService:
             },
             requested_by=record.requested_by,
         )
+        if updated:
+            self._broadcast_command_status(updated)
         return updated.as_history_item() if updated else None
 
     def nack_command(self, cmd_id: UUID, *, reason: str | None = None) -> CommandHistoryItem | None:
@@ -257,7 +274,23 @@ class CommandService:
             },
             requested_by=record.requested_by,
         )
+        if updated:
+            self._broadcast_command_status(updated)
         return updated.as_history_item() if updated else None
+
+    def _broadcast_command_status(self, record: StoredCommand) -> None:
+        """Emit a ``command_status`` WebSocket event for a status transition."""
+        if self._ws is None:
+            return
+        self._ws.broadcast_sync(
+            COMMAND_STATUS_EVENT,
+            {
+                "cmd_id": str(record.cmd_id),
+                "drone_id": record.drone_id,
+                "status": record.status.value,
+                "attempt_count": record.attempt_count,
+            },
+        )
 
     def _rejection_reason(
         self,

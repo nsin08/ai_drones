@@ -3,7 +3,7 @@
 **Created:** 2026-03-02  
 **Last Updated:** 2026-03-22  
 **Branch Base:** `feature/04-mission-control-v4`  
-**Current Status:** ~55–60% complete (W11 ✅ done, W12 ✅ done, W13–W16 pending)  
+**Current Status:** ~70–75% complete (W11 ✅ done, W12 ✅ done, W13 ✅ done, W14–W16 pending)  
 **Reference Plan:** `d:\refrences\MISSION_CONTROL_V4_PLAN.md`  
 **Reference Summary:** `d:\refrences\V4_QUICK_SUMMARY.md`
 
@@ -40,7 +40,16 @@
 | `services/mission_service.py` — FSM-guarded mission lifecycle | **W12** | **✅ DONE** |
 | Full mission REST API (plan/start/pause/resume/complete/abort) | **W12** | **✅ DONE** |
 | `db/seed.py` — 12 SIM + 2 HW drones + 2 sample missions | **W12** | **✅ DONE** |
-| 52 new tests (retry + FSM + API); total 132/132 passing | **W12** | **✅ DONE** |
+| `WebSocketManager` — connect/disconnect/broadcast/broadcast_sync | **W13** | **✅ DONE** |
+| `HealthService` — score_drone, fleet_summary, get_drone_health | **W13** | **✅ DONE** |
+| `InMemoryDroneRepository` (in-memory, mirrors DroneRepository API) | **W13** | **✅ DONE** |
+| `DroneHealthResult` schema + `DRONE_HEALTH_EVENT` constant | **W13** | **✅ DONE** |
+| Real `GET /api/fleet/health` (replaces placeholder) | **W13** | **✅ DONE** |
+| `GET /api/drones/{id}/health` endpoint | **W13** | **✅ DONE** |
+| `GET /ws` WebSocket endpoint | **W13** | **✅ DONE** |
+| `CommandService` WS broadcast on every status transition | **W13** | **✅ DONE** |
+| `HealthService` WS broadcast after each score update | **W13** | **✅ DONE** |
+| 46 new tests (health scoring, offline, fleet API, WS manager, WS events); total 178/178 | **W13** | **✅ DONE** |
 
 ---
 
@@ -54,8 +63,8 @@
 | G4 | Event sourcing: no DB persistence, no snapshot | S4-002 | ✅ RESOLVED | W11 |
 | G5 | Command retry loop missing (config exists, execution absent) | S4-003 | ✅ RESOLVED | W12 |
 | G6 | Multi-mission state machine entirely absent | S4-004 | ✅ RESOLVED | W12 |
-| G7 | `/api/fleet/health` returns zeros — health scoring not implemented | S4-005 | P1 |
-| G8 | No WebSocket broadcast (socket constants exist, no transport) | S4-007 | P1 |
+| G7 | `/api/fleet/health` returns zeros — health scoring not implemented | S4-005 | ✅ RESOLVED | W13 |
+| G8 | No WebSocket broadcast (socket constants exist, no transport) | S4-007 | ✅ RESOLVED | W13 |
 | G9 | No JWT auth — every command endpoint is open | S4-008 | P1 |
 | G10 | No MQTT topic routing `fleet/{env}/{drone_id}` | S4-010 | P1 |
 | G11 | No circuit breaker / MQTT reconnect backoff | S4-009 | P2 |
@@ -67,14 +76,14 @@
 
 ## Sprint Allocation
 
-| Sprint | Window | Theme | Gaps Addressed |
-|--------|--------|-------|----------------|
-| **W11** | 2026-03-09 — 2026-03-15 | Persistence + Event Sourcing | G1, G2, G3, G4 |
-| **W12** | 2026-03-16 — 2026-03-22 | Command Retry + Mission Model | G5, G6 |
-| **W13** | 2026-03-23 — 2026-03-29 | Health Scoring + Real-Time Feedback | G7, G8 |
-| **W14** | 2026-03-30 — 2026-04-05 | Auth + Environment Separation | G9, G10 |
-| **W15** | 2026-04-06 — 2026-04-12 | Reliability + Interactive UI | G11, G12 |
-| **W16** | 2026-04-13 — 2026-04-19 | Integration Testing + Docs | G13, G14 |
+| Sprint | Window | Theme | Gaps Addressed | Status |
+|--------|--------|-------|----------------|--------|
+| **W11** | 2026-03-09 — 2026-03-15 | Persistence + Event Sourcing | G1, G2, G3, G4 | ✅ DONE |
+| **W12** | 2026-03-16 — 2026-03-22 | Command Retry + Mission Model | G5, G6 | ✅ DONE |
+| **W13** | 2026-03-23 — 2026-03-29 | Health Scoring + Real-Time Feedback | G7, G8 | ✅ DONE |
+| **W14** | 2026-03-30 — 2026-04-05 | Auth + Environment Separation | G9, G10 | pending |
+| **W15** | 2026-04-06 — 2026-04-12 | Reliability + Interactive UI | G11, G12 | pending |
+| **W16** | 2026-04-13 — 2026-04-19 | Integration Testing + Docs | G13, G14 | pending |
 
 ---
 
@@ -411,11 +420,12 @@ class MissionService:
 
 ---
 
-## Sprint W13: Health Scoring + Real-Time Feedback
+## Sprint W13: Health Scoring + Real-Time Feedback ✅ COMPLETE
 
 **Branch:** `feature/04d-health-scoring-websocket`  
 **Gaps:** G7, G8  
-**Plan Tasks:** S4-005, S4-007
+**Plan Tasks:** S4-005, S4-007  
+**Status:** ✅ **DELIVERED** (178/178 tests passing)
 
 ### Goal
 
@@ -498,35 +508,35 @@ The `COMMAND_STATUS_EVENT` constant exists in `schemas/socket_events.py` but not
 ### W13 Implementation Checklist
 
 #### Health Scoring (G7)
-- [ ] Create `services/health_service.py` with `score_drone()` and `fleet_summary()`
-- [ ] `score_drone()` computes `min(battery, gps, ekf, signal)` score per formula
-- [ ] `score_drone()` assigns label: `GREEN` / `YELLOW` / `RED` / `OFFLINE`
-- [ ] Add `DroneHealthResult` schema to `schemas/health.py`
-- [ ] Replace placeholder `GET /api/fleet/health` with real `HealthService.fleet_summary()` call
-- [ ] Add `GET /api/drones/{id}/health` endpoint
-- [ ] Wire `HealthService` into `ServiceContainer`
-- [ ] Update `Drone` model rows with `health_score` + `health_label` after each telemetry ingestion
+- [x] Create `services/health_service.py` with `score_drone()` and `fleet_summary()`
+- [x] `score_drone()` computes `min(battery, gps, ekf, signal)` score per formula
+- [x] `score_drone()` assigns label: `GREEN` / `YELLOW` / `RED` / `OFFLINE`
+- [x] Add `DroneHealthResult` schema to `schemas/health.py`
+- [x] Replace placeholder `GET /api/fleet/health` with real `HealthService.fleet_summary()` call
+- [x] Add `GET /api/drones/{id}/health` endpoint
+- [x] Wire `HealthService` into `ServiceContainer`
+- [x] Update `Drone` model rows with `health_score` + `health_label` after each score update
 
 #### WebSocket (G8)
-- [ ] Create `poc/v4_mission_control/ws/__init__.py`
-- [ ] Create `poc/v4_mission_control/ws/manager.py` — `WebSocketManager` with `connect()`, `disconnect()`, `broadcast()`
-- [ ] Add `GET /ws` WebSocket route to `api/routes.py`
-- [ ] Inject `ws_manager` into `CommandService`; call `broadcast(COMMAND_STATUS_EVENT, ...)` on each status change
-- [ ] Inject `ws_manager` into `HealthService`; call `broadcast(DRONE_HEALTH_EVENT, ...)` after score update
-- [ ] Add `DRONE_HEALTH_EVENT` constant to `schemas/socket_events.py`
+- [x] Create `poc/v4_mission_control/ws/__init__.py`
+- [x] Create `poc/v4_mission_control/ws/manager.py` — `WebSocketManager` with `connect()`, `disconnect()`, `broadcast()`, `broadcast_sync()`
+- [x] Add `GET /ws` WebSocket route to `api/routes.py` (via `ws_router`)
+- [x] Inject `ws_manager` into `CommandService`; call `broadcast_sync(COMMAND_STATUS_EVENT, ...)` on each status change
+- [x] Inject `ws_manager` into `HealthService`; call `broadcast_sync(DRONE_HEALTH_EVENT, ...)` after score update
+- [x] Add `DRONE_HEALTH_EVENT` constant to `schemas/socket_events.py`
 
 #### Tests
-- [ ] `test_health_service.py` — score all four components; boundary tests at 0.3 and 0.7
-- [ ] `test_health_offline.py` — drone not seen in > `STALE_TIMEOUT_SEC` → `OFFLINE`
-- [ ] `test_fleet_health_endpoint.py` — returns correct counts after inserting test drones
-- [ ] `test_ws_broadcast.py` — `WebSocketManager.broadcast()` delivers to all active connections
-- [ ] `test_command_status_ws.py` — command submission triggers WS event via `TestClient`
+- [x] `test_health_service.py` — score all four components; boundary tests at 0.3 and 0.7 (20 tests)
+- [x] `test_health_offline.py` — drone not seen in > `STALE_TIMEOUT_SEC` → `OFFLINE` (6 tests)
+- [x] `test_fleet_health_endpoint.py` — returns correct counts after inserting test drones (8 tests)
+- [x] `test_ws_broadcast.py` — `WebSocketManager.broadcast()` delivers to all active connections (10 tests)
+- [x] `test_command_status_ws.py` — command submission triggers WS event via `TestClient` (5 tests)
 
 #### DoD (S4-005 + S4-007)
-- [ ] `GET /api/fleet/health` returns correct `healthy/warning/critical/offline` from real data
-- [ ] `GET /api/drones/{id}/health` returns score + label
-- [ ] WebSocket client receives `command_status` event after `POST /api/commands`
-- [ ] Drone with `battery_pct < 10` scores `< 0.3` → `RED`
+- [x] `GET /api/fleet/health` returns correct `healthy/warning/critical/offline` from real data
+- [x] `GET /api/drones/{id}/health` returns score + label
+- [x] WebSocket client receives `command_status` event after `POST /api/commands`
+- [x] Drone with `battery_pct < 10` scores `< 0.3` → `RED`
 
 ---
 
