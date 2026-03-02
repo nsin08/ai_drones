@@ -53,6 +53,7 @@ class StoredCommand:
             status=self.status,
             attempt_count=self.attempt_count,
             created_at=_as_iso(self.created_at),
+            requested_by=self.requested_by,
         )
 
     def as_accepted_response(self) -> CommandAcceptedResponse:

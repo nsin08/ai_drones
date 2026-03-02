@@ -297,12 +297,37 @@ class CommandService:
         request: CommandRequest,
         preflight: PreflightResponse,
     ) -> str | None:
+        # Environment guard applies to ALL commands first.
+        env_err = self._env_guard(request.drone_id)
+        if env_err:
+            return env_err
         if request.command != "ARM":
             return None
         reasons = self._preflight_service.arm_rejection_reasons(preflight)
         if not reasons:
             return None
         return "; ".join(reasons)
+
+    def _env_guard(self, drone_id: str) -> str | None:
+        """Return a rejection reason when the drone doesn't match the active environment.
+
+        DRONE_ENV=ALL   → always allow (default for tests).
+        DRONE_ENV=SIM   → reject any drone whose ID does *not* start with ``SIM-``.
+        DRONE_ENV=HARDWARE → reject any drone whose ID starts with ``SIM-``.
+        """
+        env = self._settings.DRONE_ENV.upper()
+        if env == "ALL":
+            return None
+        is_sim = drone_id.upper().startswith("SIM-")
+        if env == "SIM" and not is_sim:
+            return (
+                f"Environment is SIM but drone '{drone_id}' appears to be a HARDWARE drone"
+            )
+        if env == "HARDWARE" and is_sim:
+            return (
+                f"Environment is HARDWARE but drone '{drone_id}' is a SIM drone"
+            )
+        return None
 
     def _publish_hook(self, record: StoredCommand) -> None:
         payload = {
@@ -335,6 +360,6 @@ class CommandService:
             requested_by=record.requested_by,
         )
 
-    @staticmethod
-    def _command_topic(drone_id: str) -> str:
-        return f"fleet/{drone_id}/command"
+    def _command_topic(self, drone_id: str) -> str:
+        prefix = self._settings.MQTT_TOPIC_PREFIX.rstrip("/")
+        return f"{prefix}/{drone_id}/command"

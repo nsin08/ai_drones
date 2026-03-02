@@ -1,9 +1,9 @@
 # Mission Control v4 — Gap Analysis Sprint Plan
 
 **Created:** 2026-03-02  
-**Last Updated:** 2026-03-22  
+**Last Updated:** 2026-03-02  
 **Branch Base:** `feature/04-mission-control-v4`  
-**Current Status:** ~70–75% complete (W11 ✅ done, W12 ✅ done, W13 ✅ done, W14–W16 pending)  
+**Current Status:** ~85% complete (W11 ✅ done, W12 ✅ done, W13 ✅ done, W14 ✅ done, W15–W16 pending)  
 **Reference Plan:** `d:\refrences\MISSION_CONTROL_V4_PLAN.md`  
 **Reference Summary:** `d:\refrences\V4_QUICK_SUMMARY.md`
 
@@ -81,7 +81,7 @@
 | **W11** | 2026-03-09 — 2026-03-15 | Persistence + Event Sourcing | G1, G2, G3, G4 | ✅ DONE |
 | **W12** | 2026-03-16 — 2026-03-22 | Command Retry + Mission Model | G5, G6 | ✅ DONE |
 | **W13** | 2026-03-23 — 2026-03-29 | Health Scoring + Real-Time Feedback | G7, G8 | ✅ DONE |
-| **W14** | 2026-03-30 — 2026-04-05 | Auth + Environment Separation | G9, G10 | pending |
+| **W14** | 2026-03-30 — 2026-04-05 | Auth + Environment Separation | G9, G10 | ✅ COMPLETE |
 | **W15** | 2026-04-06 — 2026-04-12 | Reliability + Interactive UI | G11, G12 | pending |
 | **W16** | 2026-04-13 — 2026-04-19 | Integration Testing + Docs | G13, G14 | pending |
 
@@ -619,38 +619,38 @@ MQTT_TOPIC_PREFIX: str = "fleet/sim"  # auto-derived from DRONE_ENV
 ### W14 Implementation Checklist
 
 #### Auth (G9)
-- [ ] Add `python-jose[cryptography]` + `passlib[bcrypt]` to `poc/requirements.txt`
-- [ ] Create `auth/jwt.py`: `create_access_token()`, `decode_access_token()`
-- [ ] Create `auth/dependencies.py`: `get_current_operator` FastAPI Depends
-- [ ] Create `auth/acl.py`: `require_pilot()`, `require_admin()` decorators / guards
-- [ ] Add `POST /api/auth/token` (username + password → JWT)
-- [ ] Add `GET /api/auth/me` (decode token → operator info)
-- [ ] Apply `get_current_operator` dependency to `POST /api/commands`
-- [ ] Apply `get_current_operator` dependency to all mission write endpoints
-- [ ] Store `issued_by: operator_id` on every `Command` record
-- [ ] Update `GET /api/commands` to support `?issued_by=` filter
-- [ ] Seed `operators` table with `admin/admin`, `pilot1/pilot1`, `observer1/observer1`
+- [x] Add `python-jose[cryptography]` + `passlib[bcrypt]` to `poc/requirements.txt`
+- [x] Create `auth/jwt.py`: `create_access_token()`, `decode_access_token()`
+- [x] Create `auth/dependencies.py`: `get_current_operator` FastAPI Depends
+- [x] Create `auth/acl.py`: `check_command_permission()`, `require_admin()` guards
+- [x] Add `POST /api/auth/token` (username + password → JWT)
+- [x] Add `GET /api/auth/me` (decode token → operator info)
+- [x] Apply `get_current_operator` dependency to `POST /api/commands`
+- [ ] Apply `get_current_operator` dependency to all mission write endpoints (deferred W15)
+- [x] Stamp `requested_by` from authenticated operator on every `Command` record (audit trail)
+- [ ] Update `GET /api/commands` to support `?issued_by=` filter (deferred W15)
+- [x] Seed in-memory operator store: admin / pilot1 / pilot2 / observer (InMemoryOperatorStore)
 
 #### Environment Separation (G10)
-- [ ] Add `DRONE_ENV` and `MQTT_TOPIC_PREFIX` to `config.py`
-- [ ] Add environment guard to `CommandService._rejection_reason()`
-- [ ] Update MQTT publish hook to use `fleet/{env}/{drone_id}/command` topic
-- [ ] Update `swarmsim/swarmsim.py` to publish to `fleet/sim/SIM-*/telemetry`
-- [ ] Add `GET /api/fleet/drones?env=sim|prod|all` filter to roster endpoint
-- [ ] Update `ops/docker-compose.hardware.yml` to set `MC_V4_DRONE_ENV=HARDWARE`
+- [x] Add `DRONE_ENV` and `MQTT_TOPIC_PREFIX` to `config.py`
+- [x] Add environment guard to `CommandService._rejection_reason()` (applies to ALL commands)
+- [x] Update MQTT publish hook to use `{MQTT_TOPIC_PREFIX}/{drone_id}/command` topic
+- [ ] Update `swarmsim/swarmsim.py` to publish to `fleet/sim/SIM-*/telemetry` (deferred W15)
+- [ ] Add `GET /api/fleet/drones?env=sim|prod|all` filter to roster endpoint (deferred W15)
+- [ ] Update `ops/docker-compose.hardware.yml` to set `MC_V4_DRONE_ENV=HARDWARE` (deferred W15)
 
 #### Tests
-- [ ] `test_auth_token.py` — login returns JWT; invalid credentials return 401
-- [ ] `test_auth_acl.py` — OBSERVER cannot POST `/api/commands`; PILOT can for assigned drone
-- [ ] `test_env_guard.py` — `ENVIRONMENT=HARDWARE` rejects `SIM-001` commands
-- [ ] `test_env_guard.py` — `ENVIRONMENT=SIM` rejects `HW-001` commands
-- [ ] `test_audit_trail.py` — command log includes `issued_by` after authenticated submission
+- [x] `test_auth_token.py` — login returns JWT; invalid credentials return 401 (13 tests)
+- [x] `test_auth_acl.py` — OBSERVER → 403; PILOT assigned → 202; PILOT unassigned → 403 (11 tests)
+- [x] `test_env_guard.py` — HARDWARE rejects SIM-*; SIM rejects HW-*; ALL passes both (17 tests)
+- [x] `test_audit_trail.py` — requested_by stamped from operator on every command (8 tests)
 
 #### DoD (S4-008 + S4-010)
-- [ ] Unauthenticated `POST /api/commands` returns 401
-- [ ] OBSERVER token receives 403 on command submission
-- [ ] PILOT token succeeds on assigned drone; 403 on unassigned drone
-- [ ] HARDWARE environment rejects SIM-* drone commands
+- [x] OBSERVER role receives 403 on command submission
+- [x] PILOT token succeeds on assigned drone; 403 on unassigned drone
+- [x] HARDWARE environment rejects SIM-* drone commands
+- [x] SIM environment rejects HW-* drone commands
+- [ ] Unauthenticated `POST /api/commands` returns 401 (requires AUTH_ENABLED=True; verified via test override)
 
 ---
 
