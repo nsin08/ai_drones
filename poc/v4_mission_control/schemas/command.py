@@ -8,13 +8,14 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class CommandStatus(str, Enum):
-    """Pinned command lifecycle states for W10."""
+    """Command lifecycle states (W10 + W12)."""
 
     REQUESTED = "REQUESTED"
     RETRYING = "RETRYING"
     ACKED = "ACKED"
     FAILED = "FAILED"
     REJECTED = "REJECTED"
+    TIMED_OUT = "TIMED_OUT"
 
 
 class CommandRequest(BaseModel):

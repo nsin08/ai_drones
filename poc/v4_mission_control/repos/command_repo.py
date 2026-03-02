@@ -130,6 +130,43 @@ class InMemoryCommandRepository:
             items = [item for item in items if item.drone_id == drone_id]
         return list(reversed(items[-limit:]))
 
+    def get(self, cmd_id: UUID) -> StoredCommand | None:
+        for record in self._commands:
+            if record.cmd_id == cmd_id:
+                return record
+        return None
+
+    def mark_retrying(self, cmd_id: UUID, *, attempt: int) -> None:
+        record = self.get(cmd_id)
+        if record:
+            record.status = CommandStatus.RETRYING
+            record.attempt_count = attempt
+            record.last_attempt_at = _utc_now()
+            record.updated_at = _utc_now()
+
+    def mark_acked(self, cmd_id: UUID) -> None:
+        record = self.get(cmd_id)
+        if record:
+            record.status = CommandStatus.ACKED
+            record.completed_at = _utc_now()
+            record.updated_at = _utc_now()
+
+    def mark_timed_out(self, cmd_id: UUID) -> None:
+        record = self.get(cmd_id)
+        if record:
+            record.status = CommandStatus.TIMED_OUT
+            record.completed_at = _utc_now()
+            record.updated_at = _utc_now()
+
+    def mark_failed(self, cmd_id: UUID, *, reason: str | None = None) -> None:
+        record = self.get(cmd_id)
+        if record:
+            record.status = CommandStatus.FAILED
+            if reason:
+                record.rejection_reason = reason
+            record.completed_at = _utc_now()
+            record.updated_at = _utc_now()
+
     def clear(self) -> None:
         self._commands.clear()
 
@@ -233,6 +270,67 @@ class SQLCommandRepository:
             return [self._to_stored(r) for r in rows]
         finally:
             session.close()
+
+    def get(self, cmd_id: UUID) -> StoredCommand | None:
+        from ..models.command import Command
+
+        session = self._factory()
+        try:
+            row = session.query(Command).filter(Command.cmd_id == cmd_id).first()
+            return self._to_stored(row) if row else None
+        finally:
+            session.close()
+
+    def _update_status(self, cmd_id: UUID, **fields: Any) -> None:
+        """Helper: update Command row fields atomically."""
+        from ..models.command import Command
+        from sqlalchemy import update
+
+        session = self._factory()
+        try:
+            fields["updated_at"] = _utc_now()
+            session.execute(
+                update(Command)
+                .where(Command.cmd_id == cmd_id)
+                .values(**fields)
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def mark_retrying(self, cmd_id: UUID, *, attempt: int) -> None:
+        self._update_status(
+            cmd_id,
+            status=CommandStatus.RETRYING.value,
+            attempt_count=attempt,
+            last_attempt_at=_utc_now(),
+        )
+
+    def mark_acked(self, cmd_id: UUID) -> None:
+        self._update_status(
+            cmd_id,
+            status=CommandStatus.ACKED.value,
+            completed_at=_utc_now(),
+        )
+
+    def mark_timed_out(self, cmd_id: UUID) -> None:
+        self._update_status(
+            cmd_id,
+            status=CommandStatus.TIMED_OUT.value,
+            completed_at=_utc_now(),
+        )
+
+    def mark_failed(self, cmd_id: UUID, *, reason: str | None = None) -> None:
+        extra = {"rejection_reason": reason} if reason else {}
+        self._update_status(
+            cmd_id,
+            status=CommandStatus.FAILED.value,
+            completed_at=_utc_now(),
+            **extra,
+        )
 
     def clear(self) -> None:
         """Not supported for SQL repository — data is durable."""
