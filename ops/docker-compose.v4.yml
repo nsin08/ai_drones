@@ -53,6 +53,10 @@ services:
       context: ..
       dockerfile: poc/Dockerfile
     container_name: mission-control-v4-backend
+    command: >
+      sh -c "alembic upgrade head &&
+             python -c 'from v4_mission_control.db.seed import run_seed; run_seed()' &&
+             uvicorn v4_mission_control.app:app --host 0.0.0.0 --port 5000"
     expose:
       - "5000"
     environment:

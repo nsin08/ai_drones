@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     # Environment / MQTT routing (W14)
     DRONE_ENV: str = "ALL"  # SIM | HARDWARE | ALL
     MQTT_TOPIC_PREFIX: str = "fleet/sim"  # auto-derived; use fleet/{env} convention
+    # MQTT broker — accept both MQTT_HOST (docker-compose) and MC_V4_MQTT_HOST
+    MQTT_HOST: str = Field(
+        default="localhost",
+        validation_alias=AliasChoices("MC_V4_MQTT_HOST", "MQTT_HOST"),
+    )
+    MQTT_PORT: int = Field(
+        default=1883,
+        validation_alias=AliasChoices("MC_V4_MQTT_PORT", "MQTT_PORT"),
+    )
 
     # Auth (W14) — False = bypass auth (legacy / test mode); True = require JWT Bearer
     AUTH_ENABLED: bool = False
