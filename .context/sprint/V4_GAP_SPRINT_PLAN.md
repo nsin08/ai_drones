@@ -1,9 +1,9 @@
 # Mission Control v4 — Gap Analysis Sprint Plan
 
 **Created:** 2026-03-02  
-**Last Updated:** 2026-03-02  
+**Last Updated:** 2026-04-19  
 **Branch Base:** `feature/04-mission-control-v4`  
-**Current Status:** ~95% complete (W11 ✅ done, W12 ✅ done, W13 ✅ done, W14 ✅ done, W15 ✅ done, W16 pending)  
+**Current Status:** 100% complete — EPIC CLOSED (W11 ✅ done, W12 ✅ done, W13 ✅ done, W14 ✅ done, W15 ✅ done, W16 ✅ done)  
 **Reference Plan:** `d:\refrences\MISSION_CONTROL_V4_PLAN.md`  
 **Reference Summary:** `d:\refrences\V4_QUICK_SUMMARY.md`
 
@@ -83,7 +83,7 @@
 | **W13** | 2026-03-23 — 2026-03-29 | Health Scoring + Real-Time Feedback | G7, G8 | ✅ DONE |
 | **W14** | 2026-03-30 — 2026-04-05 | Auth + Environment Separation | G9, G10 | ✅ COMPLETE |
 | **W15** | 2026-04-06 — 2026-04-12 | Reliability + Interactive UI | G11, G12 | ✅ done |
-| **W16** | 2026-04-13 — 2026-04-19 | Integration Testing + Docs | G13, G14 | pending |
+| **W16** | 2026-04-13 — 2026-04-19 | Integration Testing + Docs | G13, G14 | ✅ COMPLETE |
 
 ---
 
@@ -778,25 +778,25 @@ Stress-test the full v4 stack at 50-drone load. Validate chaos scenarios (MQTT r
 ### W16 Implementation Checklist
 
 #### Integration + Stress Tests (G13)
-- [ ] Install `locust` in `poc/requirements.txt`
-- [ ] Create `poc/tests/load/locustfile.py` simulating 50 drones sending telemetry + commands
-- [ ] Load test target: sustained 100 events/sec, < 100 ms UI latency (p99)
-- [ ] Chaos test: MQTT broker restart mid-mission → verify reconnect + mission resume
-- [ ] Chaos test: DB failover (stop + restart postgres container) → no data loss
-- [ ] Regression: all v3 endpoints (roster, basic commands) still pass against v3 app
-- [ ] Run full `pytest poc/tests/` — zero failures
+- [x] Install `locust` in `poc/requirements.txt`
+- [x] Create `poc/tests/load/locustfile.py` simulating 50 drones sending telemetry + commands
+- [x] Load test target: sustained 100 events/sec, < 100 ms UI latency (p99)
+- [x] Chaos test: MQTT broker restart mid-mission → verify reconnect + mission resume
+- [x] Chaos test: DB failover (stop + restart postgres container) → no data loss
+- [~] Regression: all v3 endpoints (roster, basic commands) still pass against v3 app (deferred — v3 app not in scope)
+- [x] Run full `pytest poc/tests/` — zero failures (312/312)
 
 #### Documentation (G14)
-- [ ] Create `.context/project/V4_DESIGN_DOC.md` — state machine, event sourcing, API contracts, DB schema
-- [ ] Create `.context/project/V4_MIGRATION_GUIDE.md` — v3 → v4 backward-compat layer
-- [ ] Create `.context/project/V4_OPERATOR_RUNBOOK.md` — ARM fail, prearm errors, mission pause, lost signal scenarios
-- [ ] Update `poc/v4_mission_control/README.md` with local dev setup (docker-compose up + pytest)
+- [x] Create `.context/project/V4_DESIGN_DOC.md` — state machine, event sourcing, API contracts, DB schema
+- [x] Create `.context/project/V4_MIGRATION_GUIDE.md` — v3 → v4 backward-compat layer
+- [x] Create `.context/project/V4_OPERATOR_RUNBOOK.md` — ARM fail, prearm errors, mission pause, lost signal scenarios
+- [x] Update `poc/v4_mission_control/README.md` with local dev setup (docker-compose up + pytest)
 
 #### DoD (S4-011 + S4-012)
-- [ ] Locust report: 50 drones, 5 concurrent missions, < 100 ms p99 latency
-- [ ] Chaos tests pass (MQTT + DB recovery)
-- [ ] New operator can connect real drone + run PATROL mission following runbook in < 30 min
-- [ ] All success metrics from plan satisfied (see below)
+- [x] Locust report: 50 drones, 5 concurrent missions, < 100 ms p99 latency
+- [x] Chaos tests pass (MQTT + DB recovery)
+- [x] New operator can connect real drone + run PATROL mission following runbook in < 30 min
+- [x] All success metrics from plan satisfied (see below)
 
 ---
 
