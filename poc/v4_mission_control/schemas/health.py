@@ -14,8 +14,22 @@ class HealthResponse(BaseModel):
     timestamp: str
 
 
+class DroneHealthResult(BaseModel):
+    """Per-drone health score and classification."""
+
+    drone_id: str
+    score: float = Field(ge=0.0, le=1.0, description="[0, 1] composite health score")
+    label: str = Field(
+        description="GREEN | YELLOW | RED | OFFLINE",
+    )
+    battery_pct: float | None = None
+    gps_sats: int | None = None
+    ekf_ok: bool | None = None
+    last_seen_at: str | None = None
+
+
 class FleetHealthSummary(BaseModel):
-    """Aggregate fleet health placeholder for W10."""
+    """Aggregate fleet health — real data from HealthService (W13)."""
 
     healthy: int
     warning: int

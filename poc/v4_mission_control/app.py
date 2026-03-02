@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 
 from .api.routes import router as api_router
+from .api.routes import ws_router
 from .config import get_settings
 
 
@@ -17,6 +18,7 @@ def create_app() -> FastAPI:
         redoc_url="/redoc",
     )
     app.include_router(api_router)
+    app.include_router(ws_router)   # WebSocket at /ws (no prefix)
     app.state.environment = settings.ENVIRONMENT
     return app
 

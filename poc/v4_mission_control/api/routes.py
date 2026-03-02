@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse
 
 from ..config import Settings
@@ -14,7 +14,7 @@ from ..schemas.command import (
     CommandRejectedResponse,
     CommandRequest,
 )
-from ..schemas.health import FleetHealthSummary, HealthResponse
+from ..schemas.health import DroneHealthResult, FleetHealthSummary, HealthResponse
 from ..schemas.mission import (
     MissionCreateRequest,
     MissionListResponse,
@@ -28,6 +28,9 @@ from ..services.runtime import ServiceContainer
 from .dependencies import get_runtime, get_v4_settings
 
 router = APIRouter(prefix="/api")
+
+# WebSocket endpoint lives outside the /api prefix so clients connect as ws://host/ws
+ws_router = APIRouter()
 
 
 def _utc_now_iso() -> str:
@@ -67,15 +70,33 @@ def read_preflight(
 
 
 # ---------------------------------------------------------------------------
-# Fleet health (placeholder)
+# Fleet health (real — powered by HealthService, W13)
 # ---------------------------------------------------------------------------
 
 
 @router.get("/fleet/health", response_model=FleetHealthSummary)
-def read_fleet_health() -> FleetHealthSummary:
-    """Placeholder fleet health summary for the v4 shell."""
+def read_fleet_health(
+    runtime: ServiceContainer = Depends(get_runtime),
+) -> FleetHealthSummary:
+    """Return aggregate fleet health scores from the health scoring engine."""
 
-    return FleetHealthSummary(healthy=0, warning=0, critical=0, offline=0, details=[])
+    return runtime.health_service.fleet_summary()
+
+
+@router.get("/drones/{drone_id}/health", response_model=DroneHealthResult)
+def read_drone_health(
+    drone_id: str,
+    runtime: ServiceContainer = Depends(get_runtime),
+) -> DroneHealthResult:
+    """Return the health score and label for a single drone."""
+
+    result = runtime.health_service.get_drone_health(drone_id)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Drone {drone_id!r} not found in registry",
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -303,3 +324,30 @@ def abort_mission(
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ---------------------------------------------------------------------------
+# WebSocket  (/ws — outside the /api prefix, registered via ws_router)
+# ---------------------------------------------------------------------------
+
+
+@ws_router.websocket("/ws")
+async def websocket_endpoint(
+    ws: WebSocket,
+    runtime: ServiceContainer = Depends(get_runtime),
+) -> None:
+    """WebSocket endpoint for real-time command status and drone health events.
+
+    Clients connect to ``ws://host/ws``.  The server pushes JSON messages:
+
+    * ``command_status``  — emitted after every command state transition.
+    * ``drone_health``    — emitted after each drone health score update.
+    """
+    await runtime.ws_manager.connect(ws)
+    try:
+        while True:
+            # Keep the connection alive; the server is the publisher.
+            # Ignore any incoming text from the client.
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        runtime.ws_manager.disconnect(ws)
