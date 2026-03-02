@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { getSocket } from '../socket';
 import { V4_ENVIRONMENT, V4_NAV_ITEMS } from './constants';
 
 const DEFAULT_SERVICE_STATUS = {
@@ -10,22 +9,44 @@ const DEFAULT_SERVICE_STATUS = {
   environment: V4_ENVIRONMENT,
 };
 
+const POLL_INTERVAL_MS = 5000;
+
 function statusLabel(connected, label) {
   return `${label}: ${connected ? 'Connected' : 'Pending'}`;
+}
+
+async function fetchServiceStatus() {
+  const res = await fetch('/api/health');
+  if (!res.ok) throw new Error('health check failed');
+  const data = await res.json();
+  return {
+    mqtt: data.mqtt_connected ?? false,
+    inventory: data.inventory_available ?? false,
+    // If the API responds the DB is reachable (backend requires DB on every request)
+    database: true,
+  };
 }
 
 export default function AppShell() {
   const [serviceStatus, setServiceStatus] = useState(DEFAULT_SERVICE_STATUS);
 
   useEffect(() => {
-    const socket = getSocket();
-    const handleServiceStatus = (payload) => {
-      setServiceStatus((current) => ({ ...current, ...payload }));
-    };
+    let cancelled = false;
 
-    socket.on('service_status', handleServiceStatus);
+    async function poll() {
+      try {
+        const status = await fetchServiceStatus();
+        if (!cancelled) setServiceStatus((prev) => ({ ...prev, ...status }));
+      } catch {
+        if (!cancelled) setServiceStatus((prev) => ({ ...prev, database: false }));
+      }
+    }
+
+    poll();
+    const id = setInterval(poll, POLL_INTERVAL_MS);
     return () => {
-      socket.off('service_status', handleServiceStatus);
+      cancelled = true;
+      clearInterval(id);
     };
   }, []);
 
