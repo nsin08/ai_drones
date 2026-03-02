@@ -6,6 +6,7 @@ from functools import lru_cache
 from ..auth.operator_store import InMemoryOperatorStore
 from ..config import Settings, get_settings
 from ..infra.circuit_breaker import CircuitBreaker
+from ..infra.mqtt_client import MqttReconnectClient
 from ..repos.command_repo import InMemoryCommandRepository, SQLCommandRepository
 from ..repos.drone_repo import DroneRepository, InMemoryDroneRepository
 from ..repos.event_repo import InMemoryEventRepository, SQLEventRepository
@@ -37,6 +38,7 @@ class ServiceContainer:
     operator_store: InMemoryOperatorStore
     service_status: ServiceStatusService
     inventory_circuit_breaker: CircuitBreaker
+    mqtt_client: MqttReconnectClient | None = None
 
 
 @lru_cache(maxsize=1)
@@ -76,6 +78,17 @@ def get_service_container() -> ServiceContainer:
         name="inventory",
     )
 
+    # ---- MQTT client (W15) — starts background reconnect thread ---------
+    mqtt_client: MqttReconnectClient | None = None
+    if settings.MQTT_HOST:
+        mqtt_client = MqttReconnectClient(
+            host=settings.MQTT_HOST,
+            port=settings.MQTT_PORT,
+            on_connect=service_status.report_mqtt_connected,
+            on_disconnect=service_status.report_mqtt_disconnected,
+        )
+        mqtt_client.connect()
+
     # ---- Services --------------------------------------------------------
     preflight_service = PreflightService(settings=settings)
     command_service = CommandService(
@@ -111,4 +124,5 @@ def get_service_container() -> ServiceContainer:
         operator_store=operator_store,
         service_status=service_status,
         inventory_circuit_breaker=inventory_circuit_breaker,
+        mqtt_client=mqtt_client,
     )

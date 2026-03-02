@@ -13,7 +13,7 @@ import sys
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from .session import get_session
+from .session import db_session as get_session
 from ..models.drone import Drone, DroneSnapshot
 from ..models.mission import Mission, Task
 
@@ -37,10 +37,8 @@ def _seed_drones(db) -> None:
         db.add(
             Drone(
                 drone_id=drone_id,
-                name=drone_id,
-                drone_type=drone_type,
-                status="IDLE",
-                metadata_json={"seeded": True},
+                env=drone_type,
+                last_telemetry_json={"seeded": True},
             )
         )
     db.flush()

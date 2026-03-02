@@ -7,7 +7,11 @@ import time
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from poc.src.ports.message_broker import MessageBroker
+if TYPE_CHECKING:
+    try:
+        from poc.src.ports.message_broker import MessageBroker
+    except ModuleNotFoundError:
+        from src.ports.message_broker import MessageBroker
 
 from ..config import Settings
 from ..repos.command_repo import InMemoryCommandRepository, SQLCommandRepository, StoredCommand
