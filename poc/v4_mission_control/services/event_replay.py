@@ -1,6 +1,5 @@
 """Event replay service for reconstructing drone state from the event log."""
 
-from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -39,22 +38,25 @@ class EventReplayService:
         )
 
         state: dict[str, Any] = {}
-        after_ts: datetime | None = None
+        skip_count: int = 0
 
         if snapshot:
             state = dict(snapshot.state_json or {})
-            after_ts = snapshot.created_at
+            # version_seq == number of events that existed when the snapshot was
+            # written (per _maybe_snapshot / manual writes in tests).  Slicing by
+            # position is immune to timestamp-collision issues that arise when
+            # snapshot.created_at and a subsequent event share the same microsecond.
+            skip_count = snapshot.version_seq
 
-        # Step 2: load events beyond the snapshot
-        event_query = (
+        # Step 2: load ALL events for this drone in chronological order, then
+        # skip the first `skip_count` (already captured in the snapshot).
+        all_events = (
             session.query(Event)
             .filter(Event.drone_id == drone_id)
             .order_by(Event.created_at.asc())
+            .all()
         )
-        if after_ts:
-            event_query = event_query.filter(Event.created_at > after_ts)
-
-        events = event_query.all()
+        events = all_events[skip_count:]
 
         # Step 3: apply events
         for event in events:
