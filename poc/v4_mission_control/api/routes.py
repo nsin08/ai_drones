@@ -115,14 +115,20 @@ def read_me(
 
 
 @router.get("/health", response_model=HealthResponse)
-def read_health(settings: Settings = Depends(get_v4_settings)) -> HealthResponse:
-    """Bootstrap liveness/readiness endpoint."""
+def read_health(
+    settings: Settings = Depends(get_v4_settings),
+    runtime: ServiceContainer = Depends(get_runtime),
+) -> HealthResponse:
+    """Bootstrap liveness/readiness endpoint. Includes W15 service status."""
 
+    svc = runtime.service_status.as_dict()
     return HealthResponse(
         status="ok",
         service=settings.SERVICE_NAME,
         environment=settings.ENVIRONMENT,
         timestamp=_utc_now_iso(),
+        mqtt_connected=svc["mqtt"],
+        inventory_available=svc["inventory"],
     )
 
 

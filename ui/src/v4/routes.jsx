@@ -4,6 +4,7 @@ import LoginPage from './pages/LoginPage.jsx';
 import CommandsPage from './pages/CommandsPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
 import FleetPage from './pages/FleetPage.jsx';
+import MissionBuilderPage from './pages/MissionBuilderPage.jsx';
 import MissionsPage from './pages/MissionsPage.jsx';
 import SettingsPage from './pages/SettingsPage.jsx';
 import './v4.css';
@@ -16,6 +17,7 @@ export default function V4Routes() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/missions" element={<MissionsPage />} />
+          <Route path="/mission-builder" element={<MissionBuilderPage />} />
           <Route path="/fleet" element={<FleetPage />} />
           <Route path="/commands" element={<CommandsPage />} />
           <Route path="/settings" element={<SettingsPage />} />

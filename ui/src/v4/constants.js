@@ -12,6 +12,7 @@ export const V4_SAFETY_DEFAULTS = Object.freeze({
 export const V4_NAV_ITEMS = Object.freeze([
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/missions', label: 'Missions' },
+  { to: '/mission-builder', label: 'Mission Builder' },
   { to: '/fleet', label: 'Fleet' },
   { to: '/commands', label: 'Commands' },
   { to: '/settings', label: 'Settings' },

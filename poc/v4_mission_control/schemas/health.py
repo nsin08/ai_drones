@@ -12,6 +12,9 @@ class HealthResponse(BaseModel):
     service: str
     environment: str
     timestamp: str
+    # W15: live connectivity state (None when unknown / not yet polled)
+    mqtt_connected: bool | None = None
+    inventory_available: bool | None = None
 
 
 class DroneHealthResult(BaseModel):

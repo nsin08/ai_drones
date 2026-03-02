@@ -5,6 +5,7 @@ from functools import lru_cache
 
 from ..auth.operator_store import InMemoryOperatorStore
 from ..config import Settings, get_settings
+from ..infra.circuit_breaker import CircuitBreaker
 from ..repos.command_repo import InMemoryCommandRepository, SQLCommandRepository
 from ..repos.drone_repo import DroneRepository, InMemoryDroneRepository
 from ..repos.event_repo import InMemoryEventRepository, SQLEventRepository
@@ -15,6 +16,7 @@ from .event_replay import EventReplayService
 from .health_service import HealthService
 from .mission_service import MissionService
 from .preflight import PreflightService
+from .service_status import ServiceStatusService
 
 
 @dataclass(frozen=True)
@@ -33,6 +35,8 @@ class ServiceContainer:
     health_service: HealthService
     ws_manager: WebSocketManager
     operator_store: InMemoryOperatorStore
+    service_status: ServiceStatusService
+    inventory_circuit_breaker: CircuitBreaker
 
 
 @lru_cache(maxsize=1)
@@ -61,6 +65,16 @@ def get_service_container() -> ServiceContainer:
 
     # ---- WebSocket manager -----------------------------------------------
     ws_manager = WebSocketManager()
+
+    # ---- Service status (W15) -------------------------------------------
+    service_status = ServiceStatusService(ws_manager=ws_manager)
+
+    # ---- Inventory circuit breaker (W15) --------------------------------
+    inventory_circuit_breaker = CircuitBreaker(
+        threshold=3,
+        reset_timeout=30.0,
+        name="inventory",
+    )
 
     # ---- Services --------------------------------------------------------
     preflight_service = PreflightService(settings=settings)
@@ -95,4 +109,6 @@ def get_service_container() -> ServiceContainer:
         health_service=health_service,
         ws_manager=ws_manager,
         operator_store=operator_store,
+        service_status=service_status,
+        inventory_circuit_breaker=inventory_circuit_breaker,
     )
