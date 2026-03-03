@@ -49,7 +49,7 @@ html, body, #root {
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 .leaflet-container { background: #0a0e17 !important; }
-.leaflet-tile-pane { filter: brightness(0.7) contrast(1.1) saturate(0.7); }
+.app-body .leaflet-tile-pane { filter: brightness(0.7) contrast(1.1) saturate(0.7); }
 .leaflet-control-zoom a {
   background: var(--bg-card) !important;
   color: var(--text-primary) !important;

@@ -8,12 +8,12 @@
  */
 
 import { useState } from 'react';
-import axios from 'axios';
 import PageSection from '../components/PageSection.jsx';
 import MissionBuilderMap from '../components/MissionBuilderMap.jsx';
 import WaypointList from '../components/WaypointList.jsx';
 import GeofenceEditor from '../components/GeofenceEditor.jsx';
 import FormationSelector from '../components/FormationSelector.jsx';
+import { createMission } from '../lib/apiClient.js';
 
 // ---------------------------------------------------------------------------
 // Geometry helper: ray-cast point-in-polygon
@@ -141,7 +141,7 @@ export default function MissionBuilderPage() {
     };
 
     try {
-      const res = await axios.post('/api/missions', payload);
+      const res = await createMission(payload);
       setSubmitStatus('success');
       setSubmitMessage(`Mission created — ID: ${res.data.mission_id || res.data.id || 'OK'}`);
       // Reset builder

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { V4_ENVIRONMENT, V4_NAV_ITEMS } from './constants';
 import { getSocket } from '../socket';
+import { clearStoredSession } from './auth/session.js';
+import { readHealth, readMe } from './lib/apiClient.js';
 
 const DEFAULT_SERVICE_STATUS = {
   mqtt: false,
@@ -16,10 +18,14 @@ function statusLabel(connected, label) {
   return `${label}: ${connected ? 'Connected' : 'Pending'}`;
 }
 
+function statusClass(connected) {
+  return connected
+    ? 'v4-status-pill v4-status-pill--connected'
+    : 'v4-status-pill v4-status-pill--pending';
+}
+
 async function fetchServiceStatus() {
-  const res = await fetch('/api/health');
-  if (!res.ok) throw new Error('health check failed');
-  const data = await res.json();
+  const data = await readHealth();
   return {
     mqtt: data.mqtt_connected ?? false,
     inventory: data.inventory_available ?? false,
@@ -29,10 +35,30 @@ async function fetchServiceStatus() {
 }
 
 export default function AppShell() {
+  const navigate = useNavigate();
   const [serviceStatus, setServiceStatus] = useState(DEFAULT_SERVICE_STATUS);
+  const [operator, setOperator] = useState(null);
 
-  // Establish Socket.IO connection for real-time telemetry and events
+  // Establish native WebSocket connection for real-time telemetry and events
   useEffect(() => { getSocket(); }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadOperator() {
+      try {
+        const identity = await readMe();
+        if (!cancelled) setOperator(identity);
+      } catch {
+        if (!cancelled) setOperator(null);
+      }
+    }
+
+    loadOperator();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +79,12 @@ export default function AppShell() {
       clearInterval(id);
     };
   }, []);
+
+  function handleLogout() {
+    clearStoredSession();
+    setOperator(null);
+    navigate('/login', { replace: true });
+  }
 
   return (
     <div className="v4-shell">
@@ -78,9 +110,19 @@ export default function AppShell() {
 
         <div className="v4-topbar__status">
           <span className="v4-badge">Env {serviceStatus.environment}</span>
-          <span className="v4-status-pill">{statusLabel(serviceStatus.mqtt, 'MQTT')}</span>
-          <span className="v4-status-pill">{statusLabel(serviceStatus.database, 'DB')}</span>
-          <span className="v4-status-pill">{statusLabel(serviceStatus.inventory, 'Inventory')}</span>
+          <span className={statusClass(serviceStatus.mqtt)}>{statusLabel(serviceStatus.mqtt, 'MQTT')}</span>
+          <span className={statusClass(serviceStatus.database)}>{statusLabel(serviceStatus.database, 'DB')}</span>
+          <span className={statusClass(serviceStatus.inventory)}>{statusLabel(serviceStatus.inventory, 'Inventory')}</span>
+          {operator && (
+            <span className="v4-inline-badge">
+              {operator.username === 'anonymous' ? 'Auth Bypass' : `${operator.username} (${operator.role})`}
+            </span>
+          )}
+          {operator && operator.username !== 'anonymous' && (
+            <button type="button" className="v4-topbar__logout" onClick={handleLogout}>
+              Logout
+            </button>
+          )}
         </div>
       </header>
 

@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import AppShell from './AppShell.jsx';
+import ProtectedRoute from './components/ProtectedRoute.jsx';
 import LoginPage from './pages/LoginPage.jsx';
 import CommandsPage from './pages/CommandsPage.jsx';
 import DashboardPage from './pages/DashboardPage.jsx';
@@ -13,7 +14,13 @@ export default function V4Routes() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<AppShell />}>
+        <Route
+          element={(
+            <ProtectedRoute>
+              <AppShell />
+            </ProtectedRoute>
+          )}
+        >
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/missions" element={<MissionsPage />} />
