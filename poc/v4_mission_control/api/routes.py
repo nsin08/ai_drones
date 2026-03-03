@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSock
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from ..auth.acl import check_command_permission
+from ..auth.acl import check_command_permission, check_mission_permission
 from ..auth.dependencies import get_current_operator
 from ..auth.jwt import create_access_token
 from ..auth.operator_store import ANONYMOUS_ADMIN, OperatorContext
@@ -340,6 +340,41 @@ def nack_command(
 
 
 # ---------------------------------------------------------------------------
+# Mission access helpers
+# ---------------------------------------------------------------------------
+
+
+def _mission_drone_ids(tasks: list) -> list[str]:
+    ids: set[str] = set()
+    for task in tasks:
+        for drone_id in getattr(task, "drone_ids", []):
+            if drone_id:
+                ids.add(drone_id)
+    return sorted(ids)
+
+
+def _requested_by(operator: OperatorContext, requested_by: str | None) -> str | None:
+    if operator is not ANONYMOUS_ADMIN or requested_by is None:
+        return operator.username
+    return requested_by
+
+
+def _get_visible_mission(
+    runtime: ServiceContainer,
+    mission_id: str,
+    operator: OperatorContext,
+    *,
+    write: bool,
+) -> MissionResponse:
+    record = runtime.mission_service.get_mission(mission_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"Mission {mission_id!r} not found")
+
+    check_mission_permission(operator, _mission_drone_ids(record.tasks), write=write)
+    return record
+
+
+# ---------------------------------------------------------------------------
 # Missions
 # ---------------------------------------------------------------------------
 
@@ -352,9 +387,13 @@ def nack_command(
 def create_mission(
     payload: MissionCreateRequest,
     runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
 ) -> MissionResponse:
     """Create a new mission in PLANNING state."""
 
+    check_mission_permission(operator, _mission_drone_ids(payload.tasks), write=True)
+    if operator is not ANONYMOUS_ADMIN or payload.created_by is None:
+        payload = payload.model_copy(update={"created_by": operator.username})
     return runtime.mission_service.create_mission(payload)
 
 
@@ -362,24 +401,32 @@ def create_mission(
 def list_missions(
     status_filter: MissionStatus | None = Query(default=None, alias="status"),
     runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
 ) -> MissionListResponse:
     """List all missions, optionally filtered by status."""
 
     items = runtime.mission_service.list_missions(status=status_filter)
-    return MissionListResponse(items=items, total=len(items))
+    visible_items = []
+    for item in items:
+        try:
+            check_mission_permission(operator, _mission_drone_ids(item.tasks), write=False)
+        except HTTPException as exc:
+            if exc.status_code != status.HTTP_403_FORBIDDEN:
+                raise
+            continue
+        visible_items.append(item)
+    return MissionListResponse(items=visible_items, total=len(visible_items))
 
 
 @router.get("/missions/{mission_id}", response_model=MissionResponse)
 def read_mission(
     mission_id: str,
     runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
 ) -> MissionResponse:
     """Return a single mission by ID."""
 
-    record = runtime.mission_service.get_mission(mission_id)
-    if record is None:
-        raise HTTPException(status_code=404, detail=f"Mission {mission_id!r} not found")
-    return record
+    return _get_visible_mission(runtime, mission_id, operator, write=False)
 
 
 @router.post("/missions/{mission_id}/plan", response_model=MissionResponse)
@@ -387,12 +434,14 @@ def plan_mission(
     mission_id: str,
     body: MissionTransitionRequest = MissionTransitionRequest(),
     runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
 ) -> MissionResponse:
     """Advance mission from PLANNING → PLANNED."""
 
     try:
+        _get_visible_mission(runtime, mission_id, operator, write=True)
         return runtime.mission_service.plan_mission(
-            mission_id, requested_by=body.requested_by
+            mission_id, requested_by=_requested_by(operator, body.requested_by)
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -403,12 +452,14 @@ def start_mission(
     mission_id: str,
     body: MissionTransitionRequest = MissionTransitionRequest(),
     runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
 ) -> MissionResponse:
     """Advance mission from PLANNED → ACTIVE."""
 
     try:
+        _get_visible_mission(runtime, mission_id, operator, write=True)
         return runtime.mission_service.start_mission(
-            mission_id, requested_by=body.requested_by
+            mission_id, requested_by=_requested_by(operator, body.requested_by)
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -419,12 +470,14 @@ def pause_mission(
     mission_id: str,
     body: MissionTransitionRequest = MissionTransitionRequest(),
     runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
 ) -> MissionResponse:
     """Transition ACTIVE → PAUSED."""
 
     try:
+        _get_visible_mission(runtime, mission_id, operator, write=True)
         return runtime.mission_service.pause_mission(
-            mission_id, requested_by=body.requested_by
+            mission_id, requested_by=_requested_by(operator, body.requested_by)
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -435,12 +488,14 @@ def resume_mission(
     mission_id: str,
     body: MissionTransitionRequest = MissionTransitionRequest(),
     runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
 ) -> MissionResponse:
     """Transition PAUSED → ACTIVE."""
 
     try:
+        _get_visible_mission(runtime, mission_id, operator, write=True)
         return runtime.mission_service.resume_mission(
-            mission_id, requested_by=body.requested_by
+            mission_id, requested_by=_requested_by(operator, body.requested_by)
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -451,12 +506,14 @@ def complete_mission(
     mission_id: str,
     body: MissionTransitionRequest = MissionTransitionRequest(),
     runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
 ) -> MissionResponse:
     """Transition ACTIVE → COMPLETED."""
 
     try:
+        _get_visible_mission(runtime, mission_id, operator, write=True)
         return runtime.mission_service.complete_mission(
-            mission_id, requested_by=body.requested_by
+            mission_id, requested_by=_requested_by(operator, body.requested_by)
         )
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -467,13 +524,15 @@ def abort_mission(
     mission_id: str,
     body: MissionTransitionRequest = MissionTransitionRequest(),
     runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
 ) -> MissionResponse:
     """Abort a mission from any non-terminal state."""
 
     try:
+        _get_visible_mission(runtime, mission_id, operator, write=True)
         return runtime.mission_service.abort_mission(
             mission_id,
-            requested_by=body.requested_by,
+            requested_by=_requested_by(operator, body.requested_by),
             reason=body.reason,
         )
     except (KeyError, ValueError) as exc:

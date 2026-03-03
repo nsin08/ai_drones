@@ -83,6 +83,14 @@
   justify-content: flex-end;
 }
 
+.v4-topbar__logout {
+  padding: 0.4rem 0.8rem;
+  border: 1px solid rgba(249, 115, 96, 0.3);
+  border-radius: 999px;
+  background: rgba(249, 115, 96, 0.12);
+  color: #ffd6cf;
+}
+
 .v4-badge,
 .v4-status-pill,
 .v4-inline-badge {
@@ -97,9 +105,85 @@
   font-size: 0.82rem;
 }
 
+.v4-status-pill--connected::before,
+.v4-status-pill--pending::before {
+  content: '';
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: rgba(155, 193, 202, 0.45);
+}
+
+.v4-status-pill--connected::before {
+  background: #61d095;
+}
+
+.v4-status-pill--pending::before {
+  background: var(--v4-danger);
+}
+
 .v4-badge {
   border-color: rgba(244, 201, 93, 0.28);
   color: var(--v4-accent-strong);
+}
+
+.v4-mission-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--v4-border);
+  border-radius: 1rem;
+  background: rgba(8, 30, 43, 0.82);
+}
+
+.v4-mission-bar__group,
+.v4-mission-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.v4-mission-bar__state {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  color: #041a26;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.v4-mission-bar__btn {
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--v4-border);
+  border-radius: 999px;
+  background: rgba(97, 208, 200, 0.08);
+  color: var(--v4-text);
+  transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease;
+}
+
+.v4-mission-bar__btn:hover:not(:disabled) {
+  background: rgba(97, 208, 200, 0.16);
+}
+
+.v4-mission-bar__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.v4-mission-bar__btn--primary {
+  border-color: rgba(244, 201, 93, 0.28);
+  color: var(--v4-accent-strong);
+}
+
+.v4-mission-bar__btn--danger {
+  border-color: rgba(249, 115, 96, 0.3);
+  color: #ffd6cf;
+  background: rgba(249, 115, 96, 0.12);
 }
 
 .v4-shell__content {
@@ -267,6 +351,85 @@
 
 .v4-login__card {
   width: min(480px, 100%);
+}
+
+.v4-login__form {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1rem;
+}
+
+.v4-login__field {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  color: var(--v4-muted);
+}
+
+.v4-login__field input {
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--v4-border);
+  border-radius: 0.75rem;
+  background: rgba(3, 19, 29, 0.8);
+  color: var(--v4-text);
+}
+
+.v4-login__check {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  color: var(--v4-muted);
+}
+
+.v4-login__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.v4-login__submit {
+  padding: 0.7rem 1rem;
+  border: 1px solid rgba(244, 201, 93, 0.28);
+  border-radius: 0.8rem;
+  background: rgba(244, 201, 93, 0.12);
+  color: var(--v4-accent-strong);
+  font-weight: 700;
+}
+
+.v4-login__submit:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.v4-login__error {
+  margin: 0;
+  color: #ffd6cf;
+}
+
+.v4-login__hint {
+  margin: 1rem 0 0;
+  color: var(--v4-muted);
+  font-size: 0.85rem;
+}
+
+.v4-auth-gate {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+  color: var(--v4-text);
+  background:
+    radial-gradient(circle at top right, rgba(244, 201, 93, 0.12), transparent 30%),
+    radial-gradient(circle at bottom left, rgba(97, 208, 200, 0.14), transparent 35%),
+    linear-gradient(180deg, #041a26 0%, var(--v4-bg) 100%);
+}
+
+.v4-auth-gate__card {
+  width: min(460px, 100%);
+  padding: 1.2rem;
+  border: 1px solid var(--v4-border);
+  border-radius: 1rem;
+  background: var(--v4-surface);
 }
 
 @media (max-width: 900px) {

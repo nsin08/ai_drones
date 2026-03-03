@@ -10,7 +10,7 @@ import { useFleetStore } from './stores/fleetStore';
 import { useCommandStore } from './stores/commandStore';
 import { useMissionStore } from './stores/missionStore';
 import { useEventStore } from './stores/eventStore';
-import { fetchInventory, fetchMissions, fetchSnapshot, fetchHomeBase } from './api';
+import { listCommands, listMissions, missionStoreSnapshotFromList } from './v4/lib/apiClient';
 
 let ws = null;
 let reconnectDelay = 1000;
@@ -26,27 +26,30 @@ async function onConnected() {
   console.log('[WS] connected');
   reconnectDelay = 1000; // reset backoff
   useEventStore.getState().addEvent({ type: 'SYSTEM', message: 'Connected to Mission Control' });
-  try {
-    const [inv, mis, snap, hb] = await Promise.all([
-      fetchInventory(),
-      fetchMissions(),
-      fetchSnapshot().catch(() => null),
-      fetchHomeBase().catch(() => null),
-    ]);
-    const invList = inv?.items || inv?.drones || [];
-    if (invList.length) invList.forEach((d) => useFleetStore.getState().upsertDrone(d));
-    if (mis) useMissionStore.getState().setMissionInfo(mis);
-    if (hb) useMissionStore.getState().setHomeBase(hb);
-    if (snap) {
-      const snapList = snap.items || snap.drones || [];
-      if (snapList.length) snapList.forEach((d) => useFleetStore.getState().upsertDrone(d));
-      if (snap.commands) snap.commands.forEach((c) => useCommandStore.getState().upsertCommand(c));
-      if (snap.events) snap.events.forEach((e) => useEventStore.getState().addEvent(e));
-      if (snap.mission) useMissionStore.getState().setMissionInfo(snap.mission);
-      if (snap.home_base) useMissionStore.getState().setHomeBase(snap.home_base);
+  const [missionResult, commandResult] = await Promise.allSettled([
+    listMissions(),
+    listCommands({ limit: 20 }),
+  ]);
+
+  if (missionResult.status === 'fulfilled') {
+    const snapshot = missionStoreSnapshotFromList(missionResult.value);
+    if (snapshot) {
+      useMissionStore.getState().setMissionId(snapshot.missionId);
+      useMissionStore.getState().setMissionInfo(snapshot);
     }
-  } catch (e) {
-    console.warn('[WS] reconnect fetch failed', e);
+  } else {
+    console.warn('[WS] mission bootstrap failed', missionResult.reason);
+  }
+
+  if (commandResult.status === 'fulfilled') {
+    (commandResult.value?.items || []).forEach((command) => {
+      useCommandStore.getState().upsertCommand({
+        ...command,
+        timestamp: (Date.parse(command.created_at) || Date.now()) / 1000,
+      });
+    });
+  } else {
+    console.warn('[WS] command bootstrap failed', commandResult.reason);
   }
 }
 

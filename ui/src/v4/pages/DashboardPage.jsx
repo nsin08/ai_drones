@@ -4,6 +4,7 @@ import ConfirmDialog from '../../components/ConfirmDialog.jsx';
 import ErrorBoundary from '../../components/ErrorBoundary.jsx';
 import LeftPanel from '../../components/LeftPanel.jsx';
 import RightPanel from '../../components/RightPanel.jsx';
+import MissionBar from '../components/MissionBar.jsx';
 
 export default function DashboardPage() {
   return (
@@ -18,6 +19,8 @@ export default function DashboardPage() {
         </div>
         <span className="v4-inline-badge">Safe command skeleton wired</span>
       </header>
+
+      <MissionBar />
 
       <div className="app-body">
         <LeftPanel />

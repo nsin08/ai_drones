@@ -10,8 +10,9 @@
  */
 
 import 'leaflet/dist/leaflet.css';
+import { useEffect } from 'react';
 import L from 'leaflet';
-import { MapContainer, Marker, Polygon, Popup, TileLayer, useMapEvents } from 'react-leaflet';
+import { MapContainer, Marker, Polygon, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 // Fix Leaflet's default icon path broken by Vite's asset hashing
 delete L.Icon.Default.prototype._getIconUrl;
@@ -43,6 +44,17 @@ function ClickCapture({ onMapClick }) {
   return null;
 }
 
+function InvalidateMapSize() {
+  const map = useMap();
+
+  useEffect(() => {
+    const id = window.setTimeout(() => map.invalidateSize(), 0);
+    return () => window.clearTimeout(id);
+  }, [map]);
+
+  return null;
+}
+
 export default function MissionBuilderMap({ waypoints = [], geofence = [], onMapClick, mode = 'waypoint' }) {
   const geofencePositions = geofence.map((p) => [p.lat, p.lng]);
   const cursor = mode === 'geofence' ? 'crosshair' : 'pointer';
@@ -59,6 +71,7 @@ export default function MissionBuilderMap({ waypoints = [], geofence = [], onMap
           attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors'
         />
 
+        <InvalidateMapSize />
         <ClickCapture onMapClick={onMapClick} />
 
         {geofencePositions.length >= 3 && (
