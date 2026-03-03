@@ -64,6 +64,7 @@ SEV_NAMES          = {0: "EMERGENCY", 1: "ALERT", 2: "CRITICAL",
                       6: "INFO", 7: "DEBUG"}
 SUPPORTED_COMMANDS = {"ARM", "DISARM", "FORCE_ARM"}
 COMMAND_ACK_TOPIC  = "fleet/system/command_ack"
+MISSION_ACK_TOPIC  = "fleet/system/mission_ack"
 
 
 # ─── Shared telemetry state ────────────────────────────────────────────────────
@@ -251,6 +252,7 @@ class MqttPublisher:
         if rc == 0:
             self._connected = True
             client.subscribe(self._command_topic())
+            client.subscribe(self._mission_topic())
             print(f"  ✅  MQTT connected  broker={self.broker}:{self.port}")
         else:
             print(f"  ❌  MQTT connect failed  rc={rc}")
@@ -260,9 +262,11 @@ class MqttPublisher:
         print(f"  ⚠️   MQTT disconnected (rc={reason_code}), reconnecting...")
 
     def _on_message(self, client, userdata, msg):
-        if msg.topic != self._command_topic():
+        if msg.topic == self._command_topic():
+            self._handle_command_message(msg.payload)
             return
-        self._handle_command_message(msg.payload)
+        if msg.topic == self._mission_topic():
+            self._handle_mission_message(msg.payload)
 
     def connect(self):
         try:
@@ -280,6 +284,9 @@ class MqttPublisher:
 
     def _command_topic(self):
         return f"fleet/{self.drone_id}/command"
+
+    def _mission_topic(self):
+        return f"fleet/{self.drone_id}/mission"
 
     def _handle_command_message(self, raw_payload):
         try:
@@ -380,6 +387,183 @@ class MqttPublisher:
         if not self._connected:
             return
         self.client.publish(COMMAND_ACK_TOPIC, json.dumps(payload))
+
+    def _handle_mission_message(self, raw_payload):
+        try:
+            payload = json.loads(raw_payload.decode() if isinstance(raw_payload, bytes) else raw_payload)
+        except Exception as e:
+            self._publish_mission_ack({
+                "mission_id": None,
+                "task_id": None,
+                "drone_id": self.drone_id,
+                "result": "FAILED",
+                "detail": f"invalid JSON payload: {e}",
+                "timestamp": time.time(),
+            })
+            return
+
+        ack = self._execute_mission(payload)
+        self._publish_mission_ack(ack)
+
+    def _execute_mission(self, payload):
+        mission_id = payload.get("mission_id")
+        task_id = payload.get("task_id")
+        payload_drone_id = payload.get("drone_id")
+        action = str(payload.get("action") or "UPLOAD").strip().upper()
+        waypoints = payload.get("waypoints") or []
+
+        if payload_drone_id and payload_drone_id != self.drone_id:
+            return self._mission_ack_payload(
+                mission_id=mission_id,
+                task_id=task_id,
+                result="FAILED",
+                detail=f"wrong target drone_id={payload_drone_id}",
+            )
+
+        if action != "UPLOAD":
+            return self._mission_ack_payload(
+                mission_id=mission_id,
+                task_id=task_id,
+                result="FAILED",
+                detail=f"unsupported mission action: {action}",
+            )
+
+        if not isinstance(waypoints, list) or not waypoints:
+            return self._mission_ack_payload(
+                mission_id=mission_id,
+                task_id=task_id,
+                result="FAILED",
+                detail="no waypoints supplied",
+            )
+
+        try:
+            self._upload_waypoints(waypoints)
+            self._append_status_log(
+                f"[NOTICE] Mission upload accepted ({len(waypoints)} waypoints)"
+            )
+            return self._mission_ack_payload(
+                mission_id=mission_id,
+                task_id=task_id,
+                result="OK",
+                detail=f"uploaded {len(waypoints)} waypoints",
+            )
+        except Exception as e:
+            self._append_status_log(f"[ERROR] Mission upload failed: {e}")
+            return self._mission_ack_payload(
+                mission_id=mission_id,
+                task_id=task_id,
+                result="FAILED",
+                detail=str(e),
+            )
+
+    def _upload_waypoints(self, waypoints):
+        conn = self.processor.conn
+        if conn is None:
+            raise RuntimeError("MAVLink connection not ready")
+
+        mav = conn.mav
+        mission_type = getattr(mavutil.mavlink, "MAV_MISSION_TYPE_MISSION", 0)
+        frame = getattr(mavutil.mavlink, "MAV_FRAME_GLOBAL_RELATIVE_ALT_INT", 6)
+        command = getattr(mavutil.mavlink, "MAV_CMD_NAV_WAYPOINT", 16)
+
+        clear_all = getattr(mav, "mission_clear_all_send", None)
+        if callable(clear_all):
+            try:
+                clear_all(conn.target_system, conn.target_component, mission_type)
+            except TypeError:
+                clear_all(conn.target_system, conn.target_component)
+
+        count_send = getattr(mav, "mission_count_send", None)
+        if not callable(count_send):
+            raise RuntimeError("MISSION_COUNT sender unavailable")
+
+        try:
+            count_send(conn.target_system, conn.target_component, len(waypoints), mission_type)
+        except TypeError:
+            count_send(conn.target_system, conn.target_component, len(waypoints))
+
+        item_int_send = getattr(mav, "mission_item_int_send", None)
+        item_send = getattr(mav, "mission_item_send", None)
+
+        for seq, waypoint in enumerate(waypoints):
+            lat = float(waypoint.get("lat", waypoint.get("latitude", 0.0)))
+            lon = float(waypoint.get("lon", waypoint.get("longitude", 0.0)))
+            alt = float(waypoint.get("alt_m", waypoint.get("altitude_m", waypoint.get("alt", 0.0))))
+
+            if callable(item_int_send):
+                x = int(round(lat * 1e7))
+                y = int(round(lon * 1e7))
+                try:
+                    item_int_send(
+                        conn.target_system,
+                        conn.target_component,
+                        seq,
+                        frame,
+                        command,
+                        1 if seq == 0 else 0,
+                        1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        x,
+                        y,
+                        alt,
+                        mission_type,
+                    )
+                except TypeError:
+                    item_int_send(
+                        conn.target_system,
+                        conn.target_component,
+                        seq,
+                        frame,
+                        command,
+                        1 if seq == 0 else 0,
+                        1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        x,
+                        y,
+                        alt,
+                    )
+                continue
+
+            if not callable(item_send):
+                raise RuntimeError("MISSION_ITEM sender unavailable")
+
+            item_send(
+                conn.target_system,
+                conn.target_component,
+                seq,
+                frame,
+                command,
+                1 if seq == 0 else 0,
+                1,
+                0,
+                0,
+                0,
+                0,
+                lat,
+                lon,
+                alt,
+            )
+
+    def _publish_mission_ack(self, payload):
+        if not self._connected:
+            return
+        self.client.publish(MISSION_ACK_TOPIC, json.dumps(payload))
+
+    def _mission_ack_payload(self, *, mission_id, task_id, result, detail):
+        return {
+            "mission_id": mission_id,
+            "task_id": task_id,
+            "drone_id": self.drone_id,
+            "result": result,
+            "detail": detail,
+            "timestamp": time.time(),
+        }
 
     def _ack_payload(self, *, cmd_id, command, result, detail):
         return {
@@ -518,6 +702,7 @@ def print_status(state, lock, drone_id, broker, hz, start_time):
     print(f"  MQTT publishing to:  fleet/{drone_id}/telemetry")
     print(f"                       fleet/{drone_id}/status")
     print(f"  MQTT commands:       fleet/{drone_id}/command")
+    print(f"  MQTT missions:       fleet/{drone_id}/mission")
     print()
     print("  ── Telemetry ────────────────────────────────────────────────")
     print(f"  Position    lat={lat}  lon={lon}  alt={alt}")
