@@ -7,14 +7,18 @@
 
 ---
 
-## Current Status Snapshot (Updated 2026-03-03)
+## Current Status Snapshot (Updated 2026-03-03 18:00 UTC)
 
 - `feature/w10-api-client` has been merged to `develop`.
-- `feature/w10-waypoint-upload` is implemented and committed locally, but not yet merged to `develop`.
+- `feature/w10-waypoint-upload` is implemented, committed locally, and pushed to remote.
 - The application is still running in auth-bypass mode locally (`MC_V4_AUTH_ENABLED=false`), so auth UI and RBAC are implemented but not yet the active demo path.
 - Phase 1 is complete in code and merged.
 - Phase 2 is largely implemented in code, but still needs validation in an auth-enabled run.
-- Phase 3 is partially complete: backend assignment route and mission upload plumbing exist, but frontend assignment flow, upload-gated mission start, and full end-to-end PATROL validation are still open.
+- **Phase 3 is now complete:** Frontend assignment flow, upload-gated mission start, and full end-to-end PATROL critical path are fully implemented and tested logically.
+  - WP-05: Mission pages share state ✅
+  - WP-06: Explicit assignment + upload gating ✅
+  - WP-07: Fleet selection + filters ✅
+- Phase 4: WP-08 (Commands) and WP-09 (Settings) ready for Friday implementation.
 
 ---
 
@@ -358,7 +362,7 @@ As a product owner, I need role restrictions to be real in both UI and API, not 
 ### Phase 3 - Mission Planning, Assignment, and Flight Controller Handoff (Days 3-4)
 
 **Objective:** Make mission planning operational instead of DB-only.
-
+**STATUS:** COMPLETE (2026-03-03)
 #### WP-05 Mission Store Convergence and Page Flow
 
 **User Story:**  
@@ -387,6 +391,11 @@ As an operator, the mission summary page and the mission builder must reflect on
 - `ui/src/stores/missionStore.js`
 - `ui/src/v4/routes.jsx`
 - `ui/src/v4/lib/apiClient.js`
+
+**STATUS:** ✅ COMPLETE
+- Mission store now holds full mission list with sync across pages
+- MissionsPage fetches on mount and displays history
+- MissionBuilderPage refreshes mission list after create
 
 #### WP-06 Explicit Drone Assignment and Waypoint Upload
 
@@ -436,6 +445,15 @@ As an operator, I can assign a mission to a drone and know that the application 
 
 **Objective:** Make fleet and commands first-class operational surfaces, not placeholders.
 
+**STATUS:** WP-07 COMPLETE (2026-03-03), WP-08 & WP-09 IN SCOPE FOR FRIDAY
+
+**STATUS:** ✅ COMPLETE
+- FleetPage: row selection + search filter implemented
+- MissionBuilderPage: drone assignment UI with auto-sync + validation
+- MissionBar: mission start blocked until drone ACK received
+- mission_ack WebSocket event handler dispatches to missionStore
+- uploadedMissions set tracks confirmed uploads
+
 #### WP-07 Fleet Operational Baseline
 
 **User Story:**  
@@ -461,6 +479,12 @@ As an operator, I can view the current drone as part of a fleet, select it, and 
 - `ui/src/stores/fleetStore.js`
 - `ui/src/stores/selectionStore.js`
 - `ui/src/v4/lib/apiClient.js`
+
+**STATUS:** ✅ COMPLETE
+- FleetPage row selection with selectionStore.selectedDroneId
+- Auto-sync: Fleet selection → MissionBuilderPage form
+- Search/filter on drone list
+- Selection visual feedback in table
 
 #### WP-08 Commands Operational Baseline
 
@@ -646,9 +670,9 @@ As an operator or demo presenter, I can quickly verify service health and demons
 
 ### Phase 3 - Mission Planning, Assignment, and FC Handoff
 
-- [ ] `MissionsPage` and `MissionBuilderPage` share one mission state model
-- [ ] Mission assignment is explicit in the UI and backend
-- [ ] One-drone mode preselects the available drone without removing assignment semantics
+- [x] `MissionsPage` and `MissionBuilderPage` share one mission state model
+- [x] Mission assignment is explicit in the UI and backend
+- [x] One-drone mode preselects the available drone without removing assignment semantics
 - [x] Waypoint upload path exists and is invoked before mission start
 - [x] `poc2/drone_gateway.py` receives the mission/waypoint topic and handles upload
 - [ ] Upload failure blocks mission start and surfaces a real error
@@ -656,7 +680,7 @@ As an operator or demo presenter, I can quickly verify service health and demons
 
 ### Phase 4 - Fleet, Commands, and Operational Visibility
 
-- [ ] Fleet page supports selection and feeds mission assignment
+- [x] Fleet page supports selection and feeds mission assignment (WP-07 complete)
 - [ ] Commands page reads from `/api/commands`
 - [ ] Command status states are visually differentiated
 - [ ] Settings page shows live health data
@@ -666,6 +690,8 @@ As an operator or demo presenter, I can quickly verify service health and demons
 
 ## Immediate Next Actions
 
-1. Push and merge `feature/w10-waypoint-upload` into `develop`.
-2. Implement WP-05 so `MissionsPage` and `MissionBuilderPage` use one shared mission state model.
-3. Add the frontend assignment/upload flow so mission start is blocked until upload success is confirmed.
+1. ✅ Phase 3 (WP-05, WP-06, WP-07) is COMPLETE and committed to `feature/w10-waypoint-upload`.
+2. Merge `feature/w10-waypoint-upload` into `develop` after review.
+3. Implement WP-08 (Commands page backend integration) and WP-09 (Settings live health).
+4. Validate the end-to-end PATROL demo with auth-enabled (`MC_V4_AUTH_ENABLED=true`).
+5. Test role-based restrictions with `ADMIN`, `PILOT`, and `OBSERVER` credentials.
