@@ -7,13 +7,16 @@
  * - Submit              → validates geofence ⊇ waypoints → POST /api/missions
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import PageSection from '../components/PageSection.jsx';
 import MissionBuilderMap from '../components/MissionBuilderMap.jsx';
 import WaypointList from '../components/WaypointList.jsx';
 import GeofenceEditor from '../components/GeofenceEditor.jsx';
 import FormationSelector from '../components/FormationSelector.jsx';
-import { createMission } from '../lib/apiClient.js';
+import { createMission, listMissions } from '../lib/apiClient.js';
+import { useFleetStore } from '../../stores/fleetStore.js';
+import { useSelectionStore } from '../../stores/selectionStore.js';
+import { useMissionStore } from '../../stores/missionStore.js';
 
 // ---------------------------------------------------------------------------
 // Geometry helper: ray-cast point-in-polygon
@@ -56,6 +59,20 @@ export default function MissionBuilderPage() {
   const [mode, setMode] = useState('waypoint'); // 'waypoint' | 'geofence'
   const [submitStatus, setSubmitStatus] = useState('idle'); // idle | loading | success | error
   const [submitMessage, setSubmitMessage] = useState('');
+  const [selectedDroneIds, setSelectedDroneIds] = useState([]);
+
+  // Get fleet and selection state
+  const dronesById = useFleetStore((state) => state.drones);
+  const selectedDroneId = useSelectionStore((state) => state.selectedDroneId);
+  const setMissions = useMissionStore((state) => state.setMissions);
+  const fleetDrones = Object.values(dronesById).sort((a, b) => a.drone_id.localeCompare(b.drone_id));
+
+  // Auto-assign drone when one is selected in Fleet
+  useEffect(() => {
+    if (selectedDroneId && !selectedDroneIds.includes(selectedDroneId)) {
+      setSelectedDroneIds([selectedDroneId]);
+    }
+  }, [selectedDroneId, selectedDroneIds]);
 
   // ------------------------------------------------------------------
   // Map click handler
@@ -113,6 +130,7 @@ export default function MissionBuilderPage() {
     waypoints.length > 0 &&
     geofenceValid &&
     outsideWaypoints.length === 0 &&
+    selectedDroneIds.length > 0 &&
     submitStatus !== 'loading';
 
   // ------------------------------------------------------------------
@@ -134,6 +152,7 @@ export default function MissionBuilderPage() {
       tasks: [
         {
           type: 'WAYPOINT_NAV',
+          drone_ids: selectedDroneIds,
           waypoints: waypoints.map(({ lat, lng, alt_m }) => ({ lat, lng, alt_m })),
           formation: formation.shape,
         },
@@ -144,10 +163,18 @@ export default function MissionBuilderPage() {
       const res = await createMission(payload);
       setSubmitStatus('success');
       setSubmitMessage(`Mission created — ID: ${res.data.mission_id || res.data.id || 'OK'}`);
+      // Refresh missions list in store
+      try {
+        const missionsResponse = await listMissions();
+        setMissions(missionsResponse.items || []);
+      } catch (err) {
+        console.error('Failed to refresh missions after creation:', err);
+      }
       // Reset builder
       setWaypoints([]);
       setGeofence([]);
       setFormation({ shape: 'V', spacing_m: 5 });
+      setSelectedDroneIds([]);
     } catch (err) {
       setSubmitStatus('error');
       setSubmitMessage(err?.response?.data?.detail || err.message || 'Submission failed');
@@ -236,6 +263,46 @@ export default function MissionBuilderPage() {
             </div>
           </PageSection>
 
+          <PageSection title="Drone Assignment" eyebrow="Target">
+            {fleetDrones.length === 0 ? (
+              <p style={{ fontSize: '12px', color: '#6b7280' }}>No drones connected yet.</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {fleetDrones.map((drone) => {
+                  const isSelected = selectedDroneIds.includes(drone.drone_id);
+                  return (
+                    <label key={drone.drone_id} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDroneIds([drone.drone_id]); // PATROL: single drone only
+                          } else {
+                            setSelectedDroneIds([]);
+                          }
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      <span style={{ fontSize: '13px', fontWeight: 500 }}>
+                        {drone.drone_id}
+                        {' '}
+                        <span style={{ fontSize: '11px', color: '#9ca3af' }}>
+                          ({Math.round(drone.battery_pct ?? 0)}%)
+                        </span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+            {selectedDroneIds.length === 0 && (
+              <p style={{ marginTop: '8px', fontSize: '11px', color: '#dc2626', fontWeight: 600 }}>
+                ⚠ Select a drone to proceed.
+              </p>
+            )}
+          </PageSection>
+
           <PageSection title={`Waypoints (${waypoints.length})`} eyebrow="Route">
             {outsideWaypoints.length > 0 && (
               <p style={{ color: '#dc2626', fontSize: '12px', marginBottom: '8px', fontWeight: 600 }}>
@@ -270,7 +337,7 @@ export default function MissionBuilderPage() {
       {/* Submit bar */}
       <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '16px' }}>
         <span style={{ fontSize: '12px', color: '#9ca3af' }}>
-          {waypoints.length} waypoint(s) · {geofence.length} geofence pts · {formation.shape} / {formation.spacing_m}m
+          {selectedDroneIds.length} drone(s) · {waypoints.length} waypoint(s) · {geofence.length} geofence pts · {formation.shape} / {formation.spacing_m}m
         </span>
         <button
           onClick={handleSubmit}

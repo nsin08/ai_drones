@@ -1,5 +1,6 @@
-import { useDeferredValue } from 'react';
+import { useState, useDeferredValue } from 'react';
 import { useFleetStore } from '../../stores/fleetStore.js';
+import { useSelectionStore } from '../../stores/selectionStore.js';
 import PageSection from '../components/PageSection.jsx';
 
 function normalizeHealth(drone) {
@@ -22,8 +23,14 @@ function normalizeHealth(drone) {
 
 export default function FleetPage() {
   const dronesById = useFleetStore((state) => state.drones);
+  const selectedDroneId = useSelectionStore((state) => state.selectedDroneId);
+  const selectDroneForMission = useSelectionStore((state) => state.selectDroneForMission);
+  const [searchFilter, setSearchFilter] = useState('');
+
   const deferredDrones = useDeferredValue(
-    Object.values(dronesById).sort((left, right) => left.drone_id.localeCompare(right.drone_id)),
+    Object.values(dronesById)
+      .filter((d) => d.drone_id.toLowerCase().includes(searchFilter.toLowerCase()))
+      .sort((left, right) => left.drone_id.localeCompare(right.drone_id)),
   );
 
   const summary = deferredDrones.reduce(
@@ -73,10 +80,25 @@ export default function FleetPage() {
       </PageSection>
 
       <PageSection title="Drone Readiness" eyebrow="Preflight Snapshot">
+        <div className="v4-filter-bar">
+          <input
+            type="text"
+            placeholder="Filter drones..."
+            value={searchFilter}
+            onChange={(e) => setSearchFilter(e.target.value)}
+            className="v4-input"
+          />
+          {selectedDroneId && (
+            <span className="v4-badge">
+              Selected: {selectedDroneId}
+            </span>
+          )}
+        </div>
         <div className="v4-table-wrap">
           <table className="v4-table">
             <thead>
               <tr>
+                <th></th>
                 <th>Drone</th>
                 <th>Health</th>
                 <th>Battery</th>
@@ -88,15 +110,27 @@ export default function FleetPage() {
             <tbody>
               {deferredDrones.length === 0 && (
                 <tr>
-                  <td colSpan="6" className="v4-empty">No fleet telemetry loaded yet.</td>
+                  <td colSpan="7" className="v4-empty">
+                    {searchFilter ? 'No drones match your filter.' : 'No fleet telemetry loaded yet.'}
+                  </td>
                 </tr>
               )}
               {deferredDrones.map((drone) => {
                 const health = normalizeHealth(drone);
                 const className = `v4-status v4-status--${health.toLowerCase()}`;
+                const isSelected = selectedDroneId === drone.drone_id;
+                const rowClassName = isSelected ? 'v4-table__row--selected' : '';
 
                 return (
-                  <tr key={drone.drone_id}>
+                  <tr
+                    key={drone.drone_id}
+                    className={rowClassName}
+                    onClick={() => selectDroneForMission(drone.drone_id)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <td className="v4-table__selection">
+                      {isSelected && '✓'}
+                    </td>
                     <td>{drone.drone_id}</td>
                     <td className={className}>{health}</td>
                     <td>{Math.round(drone.battery_pct ?? 0)}%</td>

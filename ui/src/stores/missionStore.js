@@ -16,11 +16,22 @@ export const useMissionStore = create((set) => ({
   planAssetRoute: [],      // [{lat,lon}]
   planFormation: { shape: 'BOX', spacing_m: 30 },
 
+  // Fetched mission history
+  missions: [],            // [{mission_id, type, status, tasks, created_at, ...}]
+  uploadedMissions: new Set(), // mission_ids that have been ACK'd by drones
+
   setMissionType: (t) => set({ missionType: t, missionState: 'PLANNING' }),
   setMissionState: (s) => set({ missionState: s }),
   setMissionId: (id) => set({ missionId: id }),
   setHomeBase: (hb) => set({ homeBase: hb }),
   setSelectingHomeBase: (v) => set({ selectingHomeBase: v }),
+  setMissions: (m) => set({ missions: m }),
+  addUploadedMission: (missionId) => set((state) => {
+    const updated = new Set(state.uploadedMissions);
+    updated.add(missionId);
+    return { uploadedMissions: updated };
+  }),
+  isMissionUploaded: (missionId) => get().uploadedMissions.has(missionId),
 
   setMissionInfo: (data) =>
     set((prev) => ({

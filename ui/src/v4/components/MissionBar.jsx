@@ -26,6 +26,7 @@ export default function MissionBar() {
   const missionId = useMissionStore((state) => state.missionId);
   const missionType = useMissionStore((state) => state.missionType);
   const missionState = useMissionStore((state) => state.missionState);
+  const uploadedMissions = useMissionStore((state) => state.uploadedMissions);
   const showConfirm = useUIStore((state) => state.showConfirm);
 
   const totalDrones = Object.keys(drones).length;
@@ -95,9 +96,10 @@ export default function MissionBar() {
             type="button"
             className="v4-mission-bar__btn v4-mission-bar__btn--primary"
             onClick={() => applyTransition('start')}
-            disabled={!missionId}
+            disabled={!missionId || !uploadedMissions.has(missionId)}
+            title={missionId && !uploadedMissions.has(missionId) ? 'Waiting for drone to acknowledge mission upload...' : ''}
           >
-            Start
+            {uploadedMissions.has(missionId) ? 'Start' : 'Waiting for ACK...'}
           </button>
         )}
         {missionState === 'ACTIVE' && (

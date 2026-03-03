@@ -84,6 +84,17 @@ function dispatch(event, data) {
         message: `Mission -> ${data.mission_state || data.mission_type}`,
       });
       break;
+    case 'mission_ack':
+      // Acknowledge: mission successfully uploaded to drone
+      if (data.mission_id) {
+        useMissionStore.getState().addUploadedMission(data.mission_id);
+      }
+      useEventStore.getState().addEvent({
+        type: 'MISSION',
+        message: `Mission ACK from ${data.drone_id}: ${data.status || 'uploaded'}`,
+      });
+      console.log('[WS] mission_ack:', data);
+      break;
     case 'drone_health':
       // merge health fields into existing drone entry
       if (data.drone_id) useFleetStore.getState().upsertDrone(data);

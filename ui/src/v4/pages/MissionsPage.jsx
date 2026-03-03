@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { useMissionStore } from '../../stores/missionStore.js';
+import { listMissions } from '../lib/apiClient.js';
 import PageSection from '../components/PageSection.jsx';
 
 export default function MissionsPage() {
@@ -7,6 +9,24 @@ export default function MissionsPage() {
   const planWaypoints = useMissionStore((state) => state.planWaypoints);
   const planGeofence = useMissionStore((state) => state.planGeofence);
   const planFormation = useMissionStore((state) => state.planFormation);
+  const missions = useMissionStore((state) => state.missions);
+  const setMissions = useMissionStore((state) => state.setMissions);
+
+  // Fetch missions on mount
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const response = await listMissions();
+        if (active) {
+          setMissions(response.items || []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch missions:', err);
+      }
+    })();
+    return () => { active = false; };
+  }, [setMissions]);
 
   return (
     <section className="v4-page">
@@ -62,9 +82,48 @@ export default function MissionsPage() {
       </PageSection>
 
       <PageSection title="Mission History" eyebrow="Next Slice">
-        <p className="v4-muted">
-          History, validation, undo/redo, and template persistence are intentionally left as explicit follow-on work.
-        </p>
+        {missions.length === 0 ? (
+          <p className="v4-muted">No missions yet. Create one in the Mission Builder.</p>
+        ) : (
+          <div className="v4-table-wrapper">
+            <table className="v4-table">
+              <thead>
+                <tr>
+                  <th>Mission</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Drones</th>
+                  <th>Waypoints</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {missions.map((mission) => {
+                  const droneCount = new Set(
+                    mission.tasks?.flatMap((t) => t.drone_ids || []) || []
+                  ).size;
+                  const wpCount = mission.tasks?.reduce(
+                    (sum, t) => sum + (t.waypoints?.length || 0),
+                    0
+                  ) || 0;
+                  const created = new Date(mission.created_at || '').toLocaleDateString();
+                  return (
+                    <tr key={mission.mission_id}>
+                      <td className="v4-table__cell--mono">{mission.mission_id}</td>
+                      <td>{mission.type}</td>
+                      <td className={`v4-badge v4-badge--${mission.status?.toLowerCase()}`}>
+                        {mission.status}
+                      </td>
+                      <td>{droneCount}</td>
+                      <td>{wpCount}</td>
+                      <td>{created}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </PageSection>
     </section>
   );

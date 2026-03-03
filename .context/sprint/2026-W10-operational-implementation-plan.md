@@ -7,6 +7,17 @@
 
 ---
 
+## Current Status Snapshot (Updated 2026-03-03)
+
+- `feature/w10-api-client` has been merged to `develop`.
+- `feature/w10-waypoint-upload` is implemented and committed locally, but not yet merged to `develop`.
+- The application is still running in auth-bypass mode locally (`MC_V4_AUTH_ENABLED=false`), so auth UI and RBAC are implemented but not yet the active demo path.
+- Phase 1 is complete in code and merged.
+- Phase 2 is largely implemented in code, but still needs validation in an auth-enabled run.
+- Phase 3 is partially complete: backend assignment route and mission upload plumbing exist, but frontend assignment flow, upload-gated mission start, and full end-to-end PATROL validation are still open.
+
+---
+
 ## Goals
 
 - Deliver one complete operational v4 path: login -> observe -> plan -> assign -> upload -> execute -> control -> review.
@@ -36,10 +47,11 @@ The UI redesign proposal defines the long-term page architecture. The demo roadm
 W10 needs a delivery plan because the current codebase has several real, code-level mismatches:
 
 1. `ui/src/v4/AppShell.jsx` already bootstraps the native WebSocket via `getSocket()`, so "bootstrap realtime" is no longer the main blocker.
-2. `ui/src/socket.js` is already a native `/ws` client, but it still bootstraps from `ui/src/api.js`, which points at legacy endpoints such as `/inventory`, `/home_base`, `/state/snapshot`, and `/mission/*`.
+2. `ui/src/socket.js` is already a native `/ws` client, so the transport is correct; however, its post-connect bootstrap still calls `ui/src/api.js`, which points at legacy endpoints such as `/inventory`, `/home_base`, `/state/snapshot`, and `/mission/*`.
 3. `poc/v4_mission_control/api/routes.py` already exposes `/api/auth/token`, `/api/auth/me`, `/api/missions`, `/api/commands`, and `/ws`, but the frontend is not built around those contracts yet.
-4. Command routes use `get_current_operator` and `check_command_permission`, but mission create/transition routes do not yet enforce authenticated operator context.
-5. The backend mission FSM exists, but there is still no explicit API path for task-to-drone assignment or waypoint upload to the flight controller.
+4. Command routes use `get_current_operator` and `check_command_permission`, and mission create/read/transition routes now also enforce authenticated operator context in code; this still needs full auth-enabled validation in the intended demo configuration.
+5. The backend mission FSM exists, `MissionService.assign_drone()` already exists, and there is now an explicit API route that wires task-to-drone assignment through the route layer.
+6. A first mission upload path now exists in code (`poc/v4_mission_control/services/waypoint_uploader.py` plus `poc2/drone_gateway.py` mission-topic ingestion), but frontend assignment/upload orchestration and full demo validation are still incomplete.
 
 This sprint closes those gaps in implementation order.
 
@@ -76,7 +88,77 @@ This sprint closes those gaps in implementation order.
 - Keep Fleet and Commands as product surfaces; do not remove or hide them from the domain model.
 - Use the v4 backend contracts as canonical: `/api/auth/token`, `/api/auth/me`, `/api/missions`, `/api/commands`, `/ws`.
 - Do not hardcode a single-drone execution path in backend logic. One-drone is an operational default, not a domain simplification.
-- Run the demo environment with `MC_V4_AUTH_ENABLED=true`.
+- Target the final demo environment with `MC_V4_AUTH_ENABLED=true`, but keep current local development assumptions compatible with auth bypass until auth-on validation is completed.
+- Treat the authenticated v4 API client as a hard prerequisite before enabling auth in the frontend flow; bare `axios` mission calls will 401 immediately once auth is enabled.
+
+---
+
+## Branching Strategy
+
+### Branch Model
+
+- Base branch for W10 work: `develop`
+- Primary integration branch for this sprint: `feature/w10-operational-ui`
+- Keep `feature/w10-operational-ui` mergeable at all times; do not let partially wired auth or waypoint upload break the branch for other developers.
+
+### Commit and Merge Order
+
+The branch strategy should mirror the technical dependency order:
+
+1. `feature/w10-api-client` is complete and merged to `develop`
+2. WP-03 and WP-04 code are implemented as part of the same foundation slice and are currently sitting in `develop`
+3. `feature/w10-waypoint-upload` is the active next slice and should be merged after review
+4. Land WP-05 after the current waypoint-upload slice is integrated
+5. Land WP-07/WP-08/WP-09 last as operational polish and visibility work
+
+This ordering matters because WP-01 and WP-03 are prerequisites. If auth is enabled before they land, the v4 UI will fail in multiple places immediately.
+
+### Recommended Sub-Branches
+
+Use short-lived topic branches off `feature/w10-operational-ui` for each risky or independently reviewable slice:
+
+- `feature/w10-api-client`
+- `feature/w10-auth-ui` (implemented in the `feature/w10-api-client` slice and already merged to `develop`)
+- `feature/w10-mission-rbac` (implemented in the `feature/w10-api-client` slice and already merged to `develop`)
+- `feature/w10-mission-store`
+- `feature/w10-waypoint-upload`
+- `feature/w10-fleet-commands-ui`
+
+Current execution has merged delivery slices directly back to `develop`. Keep remaining slices short-lived and continue to branch from `develop`.
+
+### Hard Gates
+
+- Do not enable `MC_V4_AUTH_ENABLED=true` in the shared demo flow until:
+  - the authenticated v4 API client is merged
+  - login/session storage is merged
+  - protected routing is merged
+- Do not merge waypoint upload work into `develop` until both sides are implemented:
+  - backend uploader/service path
+  - `poc2/drone_gateway.py` mission/waypoint receiver path
+- Do not merge partial mission RBAC if it protects writes but leaves operator-visible read paths inconsistent; mission and command auth should be reviewed as one coherent access model.
+
+### PR Scope Rules
+
+- Keep each PR limited to one work package or one tightly coupled dependency pair.
+- Separate frontend contract changes from backend mission-execution changes unless the change cannot function independently.
+- Require a manual happy-path note in every PR description:
+  - what was tested
+  - which role was used (`ADMIN`, `PILOT`, `OBSERVER`)
+  - whether `MC_V4_AUTH_ENABLED` was on or off
+- For WP-06, require explicit evidence of:
+  - mission assignment working
+  - waypoint upload publish path working
+  - gateway receipt/ACK behavior working
+
+### Merge Back to Develop
+
+Merge `feature/w10-operational-ui` back to `develop` only when all of the following are true:
+
+- WP-01 through WP-06 are complete
+- Auth is enabled in the intended demo configuration
+- One full PATROL mission works end-to-end
+- Fleet and Commands remain functional and visible
+- The W10 success checklist has been updated with evidence
 
 ---
 
@@ -118,6 +200,8 @@ W10 can use the existing seeded operator store and still be "fully working" for 
 
 This is sufficient for end-to-end auth and RBAC. A DB-backed operator management UI is a later enhancement, not a W10 blocker.
 
+`MC_V4_AUTH_ENABLED` is enforced at the dependency layer (`get_current_operator`), not by global FastAPI middleware. That means public endpoints such as `/api/health` can stay available before login while protected routes correctly require a bearer token.
+
 ### Mission Execution Model for W10
 
 The first fully supported path is `PATROL`, but the architecture remains multi-drone:
@@ -145,7 +229,8 @@ As the v4 UI, I must use the real v4 backend endpoints so auth, missions, comman
 - A dedicated v4 API client exists and is used by v4 pages.
 - No v4 page depends on legacy-only mission endpoints from `ui/src/api.js`.
 - Authenticated requests automatically attach `Authorization: Bearer <token>`.
-- Socket bootstrap no longer depends on missing legacy bootstrap endpoints for its critical path.
+- Mission and command pages do not use bare unauthenticated `axios` calls.
+- Socket transport remains native `/ws`; only the stale HTTP bootstrap helpers are removed or isolated.
 
 **Technical Tasks**
 
@@ -154,8 +239,13 @@ As the v4 UI, I must use the real v4 backend endpoints so auth, missions, comman
   - token injection from session storage/local storage
   - helpers for `login`, `me`, `listMissions`, `createMission`, `transitionMission`, `listCommands`, `listFleetHealth`
 - Frontend: keep `ui/src/api.js` for legacy/v3 code only; stop importing it from new or refactored v4 code paths
-- Frontend: update `ui/src/socket.js` bootstrap path so missing legacy endpoints do not break v4 readiness
+- Frontend: replace the raw `axios.post('/api/missions')` path in `MissionBuilderPage` before auth is turned on for demo mode
+- Frontend: update `ui/src/socket.js` bootstrap path so its post-connect seed logic no longer depends on missing legacy endpoints
 - Backend: add any missing route adapters only if the v4 UI cannot be cleanly moved to canonical routes
+
+**Implementation Note**
+
+WP-01 is a hard gate, not an optimization. If `MC_V4_AUTH_ENABLED=true` is enabled before the authenticated v4 API client is in place, the current Mission Builder path breaks immediately because it posts with bare `axios` and no bearer token.
 
 **Primary Files**
 
@@ -220,6 +310,10 @@ As an operator, I can log in with my assigned credentials and only see protected
 - Frontend: update `ui/src/v4/routes.jsx` to protect all non-login routes
 - Frontend: add logout action in `ui/src/v4/AppShell.jsx`
 
+**Implementation Note**
+
+`ui/src/v4/lib/` and `ui/src/v4/auth/` do not exist yet. This is still the right shape, but there is no existing scaffold, so treat file creation and wiring as part of the effort, not just code fill-in.
+
 **Primary Files**
 
 - `ui/src/v4/pages/LoginPage.jsx`
@@ -244,7 +338,7 @@ As a product owner, I need role restrictions to be real in both UI and API, not 
 
 **Technical Tasks**
 
-- Backend: add mission-specific ACL helpers in `poc/v4_mission_control/auth/acl.py`
+- Backend: create a new `check_mission_permission()` helper in `poc/v4_mission_control/auth/acl.py` (this function does not exist today)
 - Backend: apply `get_current_operator` to mission create and mission transition routes in `poc/v4_mission_control/api/routes.py`
 - Backend: stamp `requested_by` from authenticated operator for mission mutations
 - Backend: ensure task assignment route also enforces operator permissions
@@ -304,19 +398,21 @@ As an operator, I can assign a mission to a drone and know that the application 
 - The planner exposes explicit drone assignment before mission start
 - When only one drone is available, that drone is preselected, not hardcoded
 - The mission payload persists assigned drone IDs in task data
-- A backend route exists to assign a drone to a task (or mission create accepts finalized assignment)
+- A backend route exists to assign a drone to a task by wiring the existing `MissionService.assign_drone()` method through the API layer
 - Waypoints are uploaded to the flight controller through the application path under test
 - If waypoint upload fails, mission start is blocked and the UI shows a concrete failure
 - Starting, pausing, resuming, and aborting a mission update both backend state and `missionStore`
 
 **Technical Tasks**
 
-- Backend: add an explicit task assignment route in `poc/v4_mission_control/api/routes.py`
+- Backend: add an explicit task assignment route in `poc/v4_mission_control/api/routes.py` that calls the already-existing `MissionService.assign_drone()`
 - Backend: add assignment request schema(s) in `poc/v4_mission_control/schemas/mission.py`
 - Backend: extend `MissionService` usage to persist task assignment through the route layer
 - Backend: introduce `poc/v4_mission_control/services/waypoint_uploader.py` (new) or equivalent mission-execution adapter
 - Backend: wire waypoint upload through existing broker/MQTT infrastructure instead of bypassing the command path
 - Backend: emit mission/task events after successful upload and on execution state changes
+- Gateway: extend `poc2/drone_gateway.py` to subscribe to a mission/waypoint topic and translate received waypoints into MAVLink upload calls
+- Gateway: add tests in `poc2/tests/test_gateway.py` covering mission-topic parsing and waypoint upload dispatch
 - Frontend: allow selecting a drone from fleet state and include it in mission assignment flow
 - Frontend: call mission transition endpoints only after assignment and successful upload
 
@@ -328,6 +424,8 @@ As an operator, I can assign a mission to a drone and know that the application 
 - `poc/v4_mission_control/services/waypoint_uploader.py` (new)
 - `poc/v4_mission_control/services/runtime.py`
 - `poc/v4_mission_control/infra/mqtt_client.py`
+- `poc2/drone_gateway.py`
+- `poc2/tests/test_gateway.py`
 - `ui/src/v4/pages/MissionBuilderPage.jsx`
 - `ui/src/v4/pages/MissionsPage.jsx`
 - `ui/src/stores/missionStore.js`
@@ -473,6 +571,13 @@ As an operator or demo presenter, I can quickly verify service health and demons
   - publish via broker/MQTT or adapter abstraction
 - `poc/v4_mission_control/services/runtime.py`:
   - register the uploader in the service container
+- `poc2/drone_gateway.py`:
+  - subscribe to the mission upload topic
+  - validate target `drone_id`
+  - convert mission payload into MAVLink waypoint upload calls
+  - return observable success/failure acknowledgements
+- `poc2/tests/test_gateway.py`:
+  - add unit coverage for mission-topic ingestion and upload dispatch
 
 ### Documentation / Runbooks
 
@@ -499,8 +604,8 @@ As an operator or demo presenter, I can quickly verify service health and demons
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Frontend still has mixed v3/v4 dependencies | High | Isolate a canonical v4 API client first and move v4 pages onto it before feature work |
-| Mission routes currently lack auth enforcement | High | Treat mission ACL as Phase 2 P0 work, not polish |
-| Waypoint upload touches backend, broker, and UI at once | High | Implement one explicit upload adapter with observable success/failure states before adding extra mission types |
+| Mission-route auth exists in code but is not yet validated under auth-on demo config | High | Run the next validation pass with `MC_V4_AUTH_ENABLED=true` and confirm `ADMIN` / `PILOT` / `OBSERVER` behavior |
+| Waypoint upload touches backend, broker, gateway, and UI at once | High | Implement one explicit upload adapter plus the corresponding `drone_gateway.py` receiver path before adding extra mission types |
 | `AUTH_ENABLED=false` remains in default local runs | Medium | Add W10 quickstart steps that explicitly set `MC_V4_AUTH_ENABLED=true` for demo mode |
 | One-drone testing hides multi-drone bugs | Medium | Keep assignment explicit and test with seeded `allowed_drones` restrictions even if only one drone is connected |
 | Legacy `ui/src/api.js` usage leaks back into v4 pages | Medium | Treat any new import of legacy client into v4 code as a regression |
@@ -513,7 +618,7 @@ As an operator or demo presenter, I can quickly verify service health and demons
 
 ### Global Gates
 
-- [ ] New v4 API client is the only client used by v4 pages
+- [x] New v4 API client is the only client used by v4 pages
 - [ ] `MC_V4_AUTH_ENABLED=true` is used in the demo environment
 - [ ] Login works for `admin`, `pilot1`, and `observer`
 - [ ] One full PATROL mission runs through plan -> assign -> upload -> start -> abort/complete
@@ -522,28 +627,30 @@ As an operator or demo presenter, I can quickly verify service health and demons
 
 ### Phase 1 - Contract Alignment and Shell Stability
 
-- [ ] `ui/src/v4/lib/apiClient.js` exists and is wired into v4 pages
-- [ ] No v4 page depends on legacy-only `/mission/*` endpoints
-- [ ] Dashboard shows mission control actions
-- [ ] Mission Builder map tiles render correctly
-- [ ] Status pills show visual health state
+- [x] `ui/src/v4/lib/apiClient.js` exists and is wired into v4 pages
+- [x] No v4 page depends on legacy-only `/mission/*` endpoints
+- [x] `MissionBuilderPage` no longer uses bare unauthenticated `axios.post('/api/missions')`
+- [x] Dashboard shows mission control actions
+- [x] Mission Builder map tiles render correctly
+- [x] Status pills show visual health state
 
 ### Phase 2 - Authentication and RBAC
 
-- [ ] `/login` is a real login form, not a placeholder
-- [ ] Protected routes redirect unauthenticated users to `/login`
-- [ ] Token persists across refresh
-- [ ] `/api/auth/me` hydrates operator role in the UI
+- [x] `/login` is a real login form, not a placeholder
+- [x] Protected routes redirect unauthenticated users to `/login`
+- [x] Token persists across refresh
+- [x] `/api/auth/me` hydrates operator role in the UI
 - [ ] `OBSERVER` cannot mutate missions or issue commands
 - [ ] `PILOT` is restricted to allowed drones
-- [ ] Mission routes enforce auth and permission checks
+- [x] Mission routes enforce auth and permission checks
 
 ### Phase 3 - Mission Planning, Assignment, and FC Handoff
 
 - [ ] `MissionsPage` and `MissionBuilderPage` share one mission state model
 - [ ] Mission assignment is explicit in the UI and backend
 - [ ] One-drone mode preselects the available drone without removing assignment semantics
-- [ ] Waypoint upload path exists and is invoked before mission start
+- [x] Waypoint upload path exists and is invoked before mission start
+- [x] `poc2/drone_gateway.py` receives the mission/waypoint topic and handles upload
 - [ ] Upload failure blocks mission start and surfaces a real error
 - [ ] Mission lifecycle changes are reflected in `missionStore`
 
@@ -559,6 +666,6 @@ As an operator or demo presenter, I can quickly verify service health and demons
 
 ## Immediate Next Actions
 
-1. Create the canonical v4 API client and stop adding new v4 logic to `ui/src/api.js`.
-2. Replace the placeholder login page and add protected routing.
-3. Add mission-route auth enforcement before touching the waypoint upload path.
+1. Push and merge `feature/w10-waypoint-upload` into `develop`.
+2. Implement WP-05 so `MissionsPage` and `MissionBuilderPage` use one shared mission state model.
+3. Add the frontend assignment/upload flow so mission start is blocked until upload success is confirmed.
