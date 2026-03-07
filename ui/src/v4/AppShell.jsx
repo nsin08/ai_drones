@@ -127,7 +127,7 @@ export default function AppShell() {
       </header>
 
       <main className="v4-shell__content">
-        <Outlet />
+        <Outlet context={{ serviceStatus, operator }} />
       </main>
     </div>
   );

@@ -40,7 +40,8 @@ html, body, #root {
   height: 100%; width: 100%;
   background: var(--bg-primary);
   color: var(--text-primary);
-  overflow: hidden;
+  /* overflow:hidden is intentionally NOT set here so v4 pages can scroll;
+     the v3 .app-shell already enforces overflow:hidden for its own viewport */
 }
 
 ::-webkit-scrollbar { width: 6px; }

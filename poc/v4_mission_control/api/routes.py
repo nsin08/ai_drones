@@ -25,6 +25,7 @@ from ..schemas.mission import (
     MissionListResponse,
     MissionResponse,
     MissionStatus,
+    TaskResponse,
     MissionTransitionRequest,
     TaskState,
 )
@@ -53,6 +54,11 @@ class _TokenResponse(BaseModel):
     operator_id: str
     username: str
     role: str
+
+
+class _TaskAssignRequest(BaseModel):
+    drone_id: str
+    requested_by: str | None = None
 
 
 def _utc_now_iso() -> str:
@@ -429,6 +435,38 @@ def read_mission(
     return _get_visible_mission(runtime, mission_id, operator, write=False)
 
 
+@router.post("/missions/{mission_id}/tasks/{task_id}/assign", response_model=TaskResponse)
+def assign_task_drone(
+    mission_id: str,
+    task_id: str,
+    body: _TaskAssignRequest,
+    runtime: ServiceContainer = Depends(get_runtime),
+    operator: OperatorContext = Depends(get_current_operator),
+) -> TaskResponse:
+    """Append a drone assignment to one task within a mission."""
+
+    _get_visible_mission(runtime, mission_id, operator, write=True)
+    check_mission_permission(operator, [body.drone_id], write=True)
+
+    task = runtime.mission_service.assign_drone(mission_id, task_id, body.drone_id)
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Task {task_id!r} not found in mission {mission_id!r}",
+        )
+
+    runtime.event_repo.append(
+        event_type="TASK_DRONE_ASSIGNED",
+        aggregate_type="TASK",
+        aggregate_id=task_id,
+        mission_id=mission_id,
+        drone_id=body.drone_id,
+        payload_json={"drone_id": body.drone_id},
+        requested_by=_requested_by(operator, body.requested_by),
+    )
+    return task
+
+
 @router.post("/missions/{mission_id}/plan", response_model=MissionResponse)
 def plan_mission(
     mission_id: str,
@@ -458,9 +496,14 @@ def start_mission(
 
     try:
         _get_visible_mission(runtime, mission_id, operator, write=True)
-        return runtime.mission_service.start_mission(
+        started = runtime.mission_service.start_mission(
             mission_id, requested_by=_requested_by(operator, body.requested_by)
         )
+        runtime.waypoint_uploader.publish_mission(
+            started,
+            requested_by=_requested_by(operator, body.requested_by),
+        )
+        return started
     except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

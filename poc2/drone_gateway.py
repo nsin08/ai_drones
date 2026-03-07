@@ -35,6 +35,7 @@ import sys
 import time
 import threading
 from datetime import datetime
+from pathlib import Path
 
 try:
     from pymavlink import mavutil
@@ -64,6 +65,9 @@ SEV_NAMES          = {0: "EMERGENCY", 1: "ALERT", 2: "CRITICAL",
                       6: "INFO", 7: "DEBUG"}
 SUPPORTED_COMMANDS = {"ARM", "DISARM", "FORCE_ARM"}
 COMMAND_ACK_TOPIC  = "fleet/system/command_ack"
+MISSION_ACK_TOPIC  = "fleet/system/mission_ack"
+RUN_LOG_STAMP      = datetime.now().strftime("%Y%m%d_%H%M%S")
+RUN_LOG_PATH       = Path(__file__).resolve().parent / "run_logs" / f"drone_gateway_{RUN_LOG_STAMP}.log"
 
 
 # ─── Shared telemetry state ────────────────────────────────────────────────────
@@ -77,6 +81,7 @@ def _empty_state():
         "latitude": None,
         "longitude": None,
         "altitude_m": None,
+        "relative_alt_m": None,
         # motion
         "velocity_mps": 0.0,
         "speed_mps": 0.0,
@@ -106,6 +111,9 @@ def _empty_state():
         # meta
         "msg_count": 0,
         "last_heartbeat": None,
+        "mission_current_seq": None,
+        "last_item_reached": None,
+        "enable_run_log": False,
     }
 
 
@@ -114,17 +122,42 @@ def _rad2deg(r):
     return r * 180.0 / math.pi
 
 
+def _record_status_entry(state, entry, *, drone_id=None):
+    log = state["status_log"]
+    if entry in log:
+        return
+
+    log.insert(0, entry)
+    state["status_log"] = log[:10]
+
+    if not state.get("enable_run_log"):
+        return
+
+    try:
+        RUN_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        prefix = f"{stamp} [{drone_id or 'UNKNOWN'}]"
+        with RUN_LOG_PATH.open("a", encoding="utf-8") as fh:
+            fh.write(f"{prefix} {entry}\n")
+    except Exception:
+        pass
+
+
 # ─── MAVLink message processor ────────────────────────────────────────────────
 
 class MavlinkProcessor:
     """Owns the MAVLink connection and updates the shared state dict."""
 
-    def __init__(self, port, baud, state: dict, lock: threading.Lock):
+    def __init__(self, port, baud, state: dict, lock: threading.Lock, drone_id=None):
         self.port  = port
         self.baud  = baud
         self.state = state
         self.lock  = lock
+        self.drone_id = drone_id
         self.conn  = None
+        # Set by _upload_waypoints to intercept mission handshake messages
+        # from the receiver loop so both threads don't race on recv_match.
+        self.upload_queue = None
 
     def connect(self) -> bool:
         ports = [self.port] if self.port else AUTO_PORTS
@@ -168,12 +201,17 @@ class MavlinkProcessor:
             s["msg_count"] += 1
 
             if t == "HEARTBEAT":
+                prev_mode = s["mode"]
+                prev_armed = s["armed"]
                 s["mode"]    = mavutil.mode_string_v10(msg)
                 s["armed"]   = bool(msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED)
                 vt = msg.type
                 s["vehicle_type"] = mavutil.mavlink.enums["MAV_TYPE"].get(
                     vt, type("x", (), {"name": str(vt)})()).name.replace("MAV_TYPE_", "")
                 s["last_heartbeat"] = time.time()
+                if prev_mode != s["mode"] or prev_armed != s["armed"]:
+                    entry = f"[DEBUG] HEARTBEAT mode={s['mode']} armed={s['armed']}"
+                    _record_status_entry(s, entry, drone_id=getattr(self, "drone_id", None))
 
             elif t == "ATTITUDE":
                 s["roll_deg"]    = round(_rad2deg(msg.roll), 2)
@@ -200,6 +238,10 @@ class MavlinkProcessor:
                 s["speed_mps"]   = round(msg.groundspeed, 2)
                 s["heading_deg"] = round(msg.heading, 1)
 
+            elif t == "GLOBAL_POSITION_INT":
+                if getattr(msg, "relative_alt", None) is not None:
+                    s["relative_alt_m"] = round(msg.relative_alt / 1000.0, 1)
+
             elif t == "EKF_STATUS_REPORT":
                 s["ekf_flags"] = msg.flags
                 s["ekf_ok"]    = bool(msg.flags & 0x01)
@@ -209,14 +251,38 @@ class MavlinkProcessor:
                 s["vibe_y"] = round(msg.vibration_y, 2)
                 s["vibe_z"] = round(msg.vibration_z, 2)
 
+            elif t == "COMMAND_ACK":
+                entry = f"[DEBUG] COMMAND_ACK cmd={msg.command} result={msg.result}"
+                _record_status_entry(s, entry, drone_id=getattr(self, "drone_id", None))
+
+            elif t == "MISSION_CURRENT":
+                if s.get("mission_current_seq") != msg.seq:
+                    s["mission_current_seq"] = msg.seq
+                    entry = f"[DEBUG] MISSION_CURRENT seq={msg.seq}"
+                    _record_status_entry(s, entry, drone_id=getattr(self, "drone_id", None))
+
+            elif t == "MISSION_ITEM_REACHED":
+                if s.get("last_item_reached") != msg.seq:
+                    s["last_item_reached"] = msg.seq
+                    entry = f"[DEBUG] MISSION_REACHED seq={msg.seq}"
+                    _record_status_entry(s, entry, drone_id=getattr(self, "drone_id", None))
+
+            elif t in ("MISSION_REQUEST", "MISSION_REQUEST_INT", "MISSION_ACK"):
+                # During upload, hand these off to the uploader thread via the
+                # queue so we don't compete on conn.recv_match.
+                q = self.upload_queue
+                if q is not None:
+                    try:
+                        q.put_nowait(msg)
+                    except Exception:
+                        pass
+                # fall through — also count the message
+
             elif t == "STATUSTEXT":
                 text     = msg.text.strip()
                 sev_name = SEV_NAMES.get(msg.severity, str(msg.severity))
                 entry    = f"[{sev_name}] {text}"
-                log = s["status_log"]
-                if entry not in log:
-                    log.insert(0, entry)
-                    s["status_log"] = log[:10]
+                _record_status_entry(s, entry, drone_id=getattr(self, "drone_id", None))
 
                 if "PreArm" in text or "prearm" in text.lower():
                     s["prearm_ok"] = False
@@ -251,6 +317,7 @@ class MqttPublisher:
         if rc == 0:
             self._connected = True
             client.subscribe(self._command_topic())
+            client.subscribe(self._mission_topic())
             print(f"  ✅  MQTT connected  broker={self.broker}:{self.port}")
         else:
             print(f"  ❌  MQTT connect failed  rc={rc}")
@@ -260,9 +327,11 @@ class MqttPublisher:
         print(f"  ⚠️   MQTT disconnected (rc={reason_code}), reconnecting...")
 
     def _on_message(self, client, userdata, msg):
-        if msg.topic != self._command_topic():
+        if msg.topic == self._command_topic():
+            self._handle_command_message(msg.payload)
             return
-        self._handle_command_message(msg.payload)
+        if msg.topic == self._mission_topic():
+            self._handle_mission_message(msg.payload)
 
     def connect(self):
         try:
@@ -280,6 +349,9 @@ class MqttPublisher:
 
     def _command_topic(self):
         return f"fleet/{self.drone_id}/command"
+
+    def _mission_topic(self):
+        return f"fleet/{self.drone_id}/mission"
 
     def _handle_command_message(self, raw_payload):
         try:
@@ -355,13 +427,46 @@ class MqttPublisher:
             return "FORCE_ARM"
         return command
 
+    def _wait_for_mode(self, conn, target_mode, timeout_s=3.0):
+        """Spin until heartbeat confirms the mode, or timeout."""
+        deadline = time.time() + timeout_s
+        while time.time() < deadline:
+            time.sleep(0.1)
+            with self.lock:
+                if self.state.get("mode", "").upper() == target_mode.upper():
+                    return True
+        return False
+
+    def _snapshot_state(self):
+        with self.lock:
+            return dict(self.state)
+
     def _send_arm_disarm(self, *, arm, force):
         conn = self.processor.conn
         if conn is None:
             raise RuntimeError("MAVLink connection not ready")
 
+        if arm:
+            # ArduCopter hard rule: AUTO / GUIDED are NOT directly armable.
+            # Required GCS sequence:
+            #   1. STABILIZE  → arm (motors idle)
+            #   2. AUTO       → mission begins executing
+            with self.lock:
+                current_mode = self.state.get("mode", "")
+
+            if current_mode.upper() != "STABILIZE":
+                try:
+                    conn.set_mode("STABILIZE")
+                    if self._wait_for_mode(conn, "STABILIZE", 3.0):
+                        self._append_status_log("[NOTICE] STABILIZE mode confirmed — sending ARM")
+                    else:
+                        self._append_status_log("[WARN] STABILIZE mode not confirmed, trying ARM anyway")
+                except Exception as e:
+                    self._append_status_log(f"[WARN] STABILIZE switch failed: {e}")
+
+        # Normal ARM obeys pre-arm checks. FORCE_ARM explicitly bypasses them.
         param1 = 1 if arm else 0
-        param2 = FORCE_ARM_MAGIC if force else 0
+        param2 = FORCE_ARM_MAGIC if (arm and force) else 0
         conn.mav.command_long_send(
             conn.target_system,
             conn.target_component,
@@ -376,10 +481,447 @@ class MqttPublisher:
             0,
         )
 
+        if arm:
+            # Wait for armed confirmation, then switch to AUTO
+            self._append_status_log("[NOTICE] Waiting for arm confirmation...")
+            armed_confirmed = False
+            for _ in range(30):  # up to 3 s
+                time.sleep(0.1)
+                with self.lock:
+                    if self.state.get("armed", False):
+                        armed_confirmed = True
+                        break
+
+            if armed_confirmed:
+                try:
+                    conn.set_mode("AUTO")
+                    if self._wait_for_mode(conn, "AUTO", 3.0):
+                        self._append_status_log("[NOTICE] AUTO mode active — mission executing")
+                    else:
+                        self._append_status_log("[WARN] AUTO mode not confirmed after arm")
+                except Exception as e:
+                    self._append_status_log(f"[WARN] AUTO switch after arm failed: {e}")
+            else:
+                self._append_status_log("[WARN] Arm not confirmed within 3s — AUTO not switched")
+
     def _publish_command_ack(self, payload):
         if not self._connected:
             return
         self.client.publish(COMMAND_ACK_TOPIC, json.dumps(payload))
+
+    def _handle_mission_message(self, raw_payload):
+        try:
+            payload = json.loads(raw_payload.decode() if isinstance(raw_payload, bytes) else raw_payload)
+        except Exception as e:
+            self._publish_mission_ack({
+                "mission_id": None,
+                "task_id": None,
+                "drone_id": self.drone_id,
+                "result": "FAILED",
+                "detail": f"invalid JSON payload: {e}",
+                "timestamp": time.time(),
+            })
+            return
+
+        ack = self._execute_mission(payload)
+        self._publish_mission_ack(ack)
+
+    def _execute_mission(self, payload):
+        mission_id = payload.get("mission_id")
+        task_id = payload.get("task_id")
+        payload_drone_id = payload.get("drone_id")
+        action = str(payload.get("action") or "UPLOAD").strip().upper()
+        waypoints = payload.get("waypoints") or []
+
+        if payload_drone_id and payload_drone_id != self.drone_id:
+            return self._mission_ack_payload(
+                mission_id=mission_id,
+                task_id=task_id,
+                result="FAILED",
+                detail=f"wrong target drone_id={payload_drone_id}",
+            )
+
+        if action != "UPLOAD":
+            return self._mission_ack_payload(
+                mission_id=mission_id,
+                task_id=task_id,
+                result="FAILED",
+                detail=f"unsupported mission action: {action}",
+            )
+
+        if not isinstance(waypoints, list) or not waypoints:
+            return self._mission_ack_payload(
+                mission_id=mission_id,
+                task_id=task_id,
+                result="FAILED",
+                detail="no waypoints supplied",
+            )
+
+        try:
+            self._upload_waypoints(waypoints)
+            self._append_status_log(
+                f"[NOTICE] Mission upload accepted ({len(waypoints)} waypoints)"
+            )
+            # Auto-execute: switch AUTO (disarmed) → arm → mission starts.
+            # Runs in a background thread so MQTT ack is returned immediately.
+            threading.Thread(target=self._auto_arm_and_start, daemon=True).start()
+            return self._mission_ack_payload(
+                mission_id=mission_id,
+                task_id=task_id,
+                result="OK",
+                detail=f"uploaded {len(waypoints)} waypoints, arming...",
+            )
+        except Exception as e:
+            self._append_status_log(f"[ERROR] Mission upload failed: {e}")
+            return self._mission_ack_payload(
+                mission_id=mission_id,
+                task_id=task_id,
+                result="FAILED",
+                detail=str(e),
+            )
+
+    def _auto_arm_and_start(self):
+        """
+        Runs in background after a successful upload.
+        ArduCopter hard rule: MAVLink arming is ONLY accepted in STABILIZE/ACRO.
+        Sequence: STABILIZE → arm → AUTO.
+        The uploaded mission includes HOME at seq 0 and TAKEOFF at seq 1.
+        """
+        conn = self.processor.conn
+        if conn is None:
+            return
+
+        time.sleep(0.5)  # let FC digest mission_set_current
+
+        # 1. STABILIZE — the only mode that accepts MAVLink arm
+        try:
+            conn.set_mode("STABILIZE")
+            self._append_status_log("[NOTICE] Switching to STABILIZE for arm")
+        except Exception as e:
+            self._append_status_log(f"[WARN] STABILIZE switch failed: {e}")
+            return
+
+        if not self._wait_for_mode(conn, "STABILIZE", 4.0):
+            self._append_status_log("[WARN] STABILIZE not confirmed — aborting auto-arm")
+            return
+
+        time.sleep(0.3)
+
+        # 2. Arm with force magic (bypasses sensor checks; pre-arm is already CLEAR)
+        self._append_status_log("[NOTICE] STABILIZE confirmed — sending ARM")
+        conn.mav.command_long_send(
+            conn.target_system,
+            conn.target_component,
+            mavutil.mavlink.MAV_CMD_COMPONENT_ARM_DISARM,
+            0,
+            1, FORCE_ARM_MAGIC, 0, 0, 0, 0, 0,
+        )
+
+        # 3. Wait for armed confirmation
+        armed = False
+        for _ in range(40):  # up to 4 s
+            time.sleep(0.1)
+            with self.lock:
+                if self.state.get("armed", False):
+                    armed = True
+                    break
+
+        if not armed:
+            self._append_status_log("[WARN] Arm not confirmed within 4s")
+            return
+
+        self._append_status_log("[NOTICE] Armed in STABILIZE — switching to AUTO")
+        time.sleep(0.2)
+
+        # 4. Switch to AUTO — now that we're armed and the mission pointer
+        #    targets seq 1 (the TAKEOFF), the mission can begin
+        try:
+            conn.set_mode("AUTO")
+        except Exception as e:
+            self._append_status_log(f"[WARN] AUTO switch failed: {e}")
+            return
+
+        if self._wait_for_mode(conn, "AUTO", 4.0):
+            self._append_status_log("[NOTICE] AUTO active — mission executing")
+            threading.Thread(target=self._trace_takeoff_window, daemon=True).start()
+        else:
+            self._append_status_log("[WARN] AUTO not confirmed after arm")
+
+    def _trace_takeoff_window(self):
+        """Trace the first few seconds after AUTO engages."""
+        start = self._snapshot_state()
+        start_alt = start.get("altitude_m")
+        start_rel_alt = start.get("relative_alt_m")
+        start_mode = start.get("mode")
+        start_armed = start.get("armed")
+        start_speed = start.get("speed_mps")
+        self._append_status_log(
+            f"[DEBUG] Takeoff trace start mode={start_mode} armed={start_armed} relAlt={start_rel_alt} alt={start_alt} spd={start_speed}"
+        )
+
+        checkpoints = (0.5, 1.0, 2.0, 4.0, 8.0)
+        base = time.time()
+        prev_mode = start_mode
+        prev_armed = start_armed
+        for delay in checkpoints:
+            sleep_for = base + delay - time.time()
+            if sleep_for > 0:
+                time.sleep(sleep_for)
+            snap = self._snapshot_state()
+            alt = snap.get("altitude_m")
+            rel_alt = snap.get("relative_alt_m")
+            delta = None
+            if start_rel_alt is not None and rel_alt is not None:
+                delta = round(rel_alt - start_rel_alt, 1)
+            elif start_alt is not None and alt is not None:
+                delta = round(alt - start_alt, 1)
+            mode = snap.get("mode")
+            armed = snap.get("armed")
+            speed = snap.get("speed_mps")
+            amps = snap.get("current_a")
+            transition = ""
+            if mode != prev_mode or armed != prev_armed:
+                transition = " state-change"
+            prev_mode = mode
+            prev_armed = armed
+            self._append_status_log(
+                f"[DEBUG] T+{delay:0.1f}s mode={mode} armed={armed} relAlt={rel_alt} dRel={delta} alt={alt} spd={speed} amps={amps}{transition}"
+            )
+
+    def _upload_waypoints(self, waypoints):
+        conn = self.processor.conn
+        if conn is None:
+            raise RuntimeError("MAVLink connection not ready")
+
+        mav = conn.mav
+        ts = conn.target_system
+        tc = conn.target_component
+        mission_type  = getattr(mavutil.mavlink, "MAV_MISSION_TYPE_MISSION", 0)
+        default_frame = getattr(mavutil.mavlink, "MAV_FRAME_GLOBAL_RELATIVE_ALT", 3)
+        default_cmd   = getattr(mavutil.mavlink, "MAV_CMD_NAV_WAYPOINT", 16)
+
+        item_int_send = getattr(mav, "mission_item_int_send", None)
+        item_send     = getattr(mav, "mission_item_send", None)
+
+        takeoff_cmd = getattr(mavutil.mavlink, "MAV_CMD_NAV_TAKEOFF", 22)
+        mission_frame = getattr(mavutil.mavlink, "MAV_FRAME_GLOBAL_RELATIVE_ALT", 3)
+        frame_mission = getattr(mavutil.mavlink, "MAV_FRAME_MISSION", 2)
+
+        # ArduPilot Copter expects a HOME placeholder at seq 0 and the first
+        # runnable mission command (TAKEOFF) at seq 1.
+        first_cmd = int((waypoints[0] or {}).get("cmd", (waypoints[0] or {}).get("command", -1)))
+        if first_cmd != takeoff_cmd:
+            raise RuntimeError("Mission must start with MAV_CMD_NAV_TAKEOFF (22) as the first runnable item")
+
+        with self.lock:
+            home_lat = self.state.get("latitude")
+            home_lon = self.state.get("longitude")
+
+        if home_lat is None:
+            home_lat = float((waypoints[0] or {}).get("lat", (waypoints[0] or {}).get("latitude", 0.0)))
+        if home_lon is None:
+            home_lon = float((waypoints[0] or {}).get(
+                "lon",
+                (waypoints[0] or {}).get("longitude", (waypoints[0] or {}).get("lng", 0.0)),
+            ))
+
+        home_item = {
+            "cmd": getattr(mavutil.mavlink, "MAV_CMD_NAV_WAYPOINT", 16),
+            "frame": mission_frame,
+            "lat": home_lat,
+            "lon": home_lon,
+            "alt_m": 0.0,
+            "param1": 0.0,
+            "param2": 0.0,
+            "param3": 0.0,
+            "param4": 0.0,
+        }
+        full_items = [home_item] + list(waypoints)
+        self._append_status_log(
+            f"[DEBUG] Mission upload prepared items={len(full_items)} takeoff_seq=1 current_seq=1 first_cmd={first_cmd}"
+        )
+
+        def _send_item(seq, wp):
+            lat = float(wp.get("lat", wp.get("latitude", 0.0)))
+            lon = float(wp.get("lon", wp.get("longitude", wp.get("lng", 0.0))))
+            alt = float(wp.get("alt_m", wp.get("altitude_m", wp.get("alt", 0.0))))
+            wp_cmd   = int(wp.get("cmd",   wp.get("command", default_cmd)))
+            wp_frame = int(wp.get("frame", default_frame))
+            p1 = float(wp.get("param1", 0.0))
+            p2 = float(wp.get("param2", 0.0))
+            p3 = float(wp.get("param3", 0.0))
+            p4 = float(wp.get("param4", 0.0))
+            # Keep all uploaded items non-current; MISSION_SET_CURRENT selects
+            # the runnable start point after upload.
+            current = 0
+
+            # ArduPilot mission docs expect standard mission frames, not the
+            # *_INT frame variants the UI may send.
+            if wp_cmd in {
+                getattr(mavutil.mavlink, "MAV_CMD_NAV_WAYPOINT", 16),
+                getattr(mavutil.mavlink, "MAV_CMD_NAV_LOITER_TIME", 19),
+                getattr(mavutil.mavlink, "MAV_CMD_NAV_TAKEOFF", 22),
+            }:
+                wp_frame = mission_frame
+            elif wp_cmd in {
+                getattr(mavutil.mavlink, "MAV_CMD_NAV_RETURN_TO_LAUNCH", 20),
+                getattr(mavutil.mavlink, "MAV_CMD_CONDITION_YAW", 115),
+            }:
+                wp_frame = frame_mission
+            elif wp_frame == 6:
+                wp_frame = mission_frame
+
+            self._append_status_log(
+                f"[DEBUG] Send seq={seq} cmd={wp_cmd} frame={wp_frame} current={current} alt={alt}"
+            )
+
+            if callable(item_send):
+                item_send(ts, tc, seq, wp_frame, wp_cmd,
+                          current, 1, p1, p2, p3, p4, lat, lon, alt)
+                return
+
+            if callable(item_int_send):
+                x = int(round(lat * 1e7))
+                y = int(round(lon * 1e7))
+                item_int_send(ts, tc, seq, wp_frame, wp_cmd,
+                              current, 1, p1, p2, p3, p4, x, y, alt)
+                return
+
+            raise RuntimeError("No MISSION_ITEM sender available")
+
+        total = len(full_items)
+
+        # ── 1. Send item count ───────────────────────────────────────────────
+        # Older fmuv3 builds can emit an immediate MISSION_ACK after
+        # MISSION_CLEAR_ALL; avoid that handshake ambiguity and let
+        # MISSION_COUNT start the replacement upload directly.
+        count_send = getattr(mav, "mission_count_send", None)
+        clear_all = getattr(mav, "mission_clear_all_send", None)
+        if not callable(count_send):
+            raise RuntimeError("MISSION_COUNT sender unavailable")
+        # Install the upload queue before MISSION_COUNT so an immediate
+        # MISSION_REQUEST(_INT) from the FC is not lost by the receiver thread.
+        import queue as _queue
+        q = _queue.Queue()
+        self.processor.upload_queue = q
+        try:
+            count_send(ts, tc, total)
+        except TypeError:
+            count_send(ts, tc, total, mission_type)
+
+        # ── 2. Handshake via queue (avoids race with the receiver thread) ──
+        # The MavlinkProcessor._process() routes MISSION_REQUEST/ACK here.
+        remaining = set(range(total))
+        deadline  = time.time() + 30
+        upload_ok = False
+        last_resend = time.time()
+        ack_deadline = None
+        request_seen = False
+        ignored_clear_ack = False
+        silent_retries = 0
+        legacy_restart_attempted = False
+
+        try:
+            while time.time() < deadline and not upload_ok:
+                try:
+                    msg = q.get(timeout=0.5 if not remaining else 2)
+                except _queue.Empty:
+                    # FC silent for 2 s — resend count to re-trigger requests
+                    if remaining and time.time() - last_resend >= 2:
+                        if not request_seen:
+                            silent_retries += 1
+                        if (
+                            not request_seen
+                            and silent_retries >= 2
+                            and not legacy_restart_attempted
+                            and callable(clear_all)
+                        ):
+                            self._append_status_log(
+                                "[DEBUG] No mission requests; trying legacy clear+count restart"
+                            )
+                            try:
+                                clear_all(ts, tc)
+                            except TypeError:
+                                clear_all(ts, tc, mission_type)
+                            time.sleep(0.1)
+                            ignored_clear_ack = False
+                            legacy_restart_attempted = True
+                        try:
+                            count_send(ts, tc, total)
+                        except TypeError:
+                            count_send(ts, tc, total, mission_type)
+                        last_resend = time.time()
+                    elif ack_deadline is not None and time.time() >= ack_deadline:
+                        break
+                    continue
+
+                mtype = msg.get_type()
+
+                if mtype == "MISSION_ACK":
+                    mav_result = getattr(msg, "type", -1)
+                    if not request_seen and not ignored_clear_ack:
+                        self._append_status_log(
+                            f"[DEBUG] Pre-request MISSION_ACK result={mav_result} ignored once"
+                        )
+                        ignored_clear_ack = True
+                        try:
+                            count_send(ts, tc, total)
+                        except TypeError:
+                            count_send(ts, tc, total, mission_type)
+                        last_resend = time.time()
+                        continue
+                    if mav_result != 0:
+                        raise RuntimeError(
+                            f"FC rejected mission during upload: MAV_MISSION_RESULT={mav_result}"
+                        )
+                    if remaining:
+                        raise RuntimeError(
+                            f"FC ACKed mission before requesting all items: {sorted(remaining)}"
+                        )
+                    upload_ok = True
+                    break
+
+                # MISSION_REQUEST or MISSION_REQUEST_INT
+                seq = msg.seq
+                if 0 <= seq < total:
+                    request_seen = True
+                    _send_item(seq, full_items[seq])
+                    remaining.discard(seq)
+                    if not remaining and ack_deadline is None:
+                        ack_deadline = time.time() + 5
+        finally:
+            # Always release the queue so the receiver loop resumes normally
+            self.processor.upload_queue = None
+
+        if not upload_ok:
+            if remaining:
+                raise RuntimeError(
+                    f"Mission upload timed out; unseqd items: {sorted(remaining)}"
+                )
+            raise RuntimeError("Mission upload completed, but FC never sent final ACK")
+
+        # ── 3. Set current item to 1 (TAKEOFF after HOME) ─────────────────
+        # After upload, move off HOME and point at TAKEOFF.
+        try:
+            mav.mission_set_current_send(ts, tc, 1)
+            self._append_status_log("[DEBUG] mission_set_current seq=1")
+        except Exception as e_cur:
+            self._append_status_log(f"[WARN] mission_set_current: {e_cur}")
+
+    def _publish_mission_ack(self, payload):
+        if not self._connected:
+            return
+        self.client.publish(MISSION_ACK_TOPIC, json.dumps(payload))
+
+    def _mission_ack_payload(self, *, mission_id, task_id, result, detail):
+        return {
+            "mission_id": mission_id,
+            "task_id": task_id,
+            "drone_id": self.drone_id,
+            "result": result,
+            "detail": detail,
+            "timestamp": time.time(),
+        }
 
     def _ack_payload(self, *, cmd_id, command, result, detail):
         return {
@@ -393,10 +935,7 @@ class MqttPublisher:
 
     def _append_status_log(self, entry):
         with self.lock:
-            log = self.state["status_log"]
-            if entry not in log:
-                log.insert(0, entry)
-                self.state["status_log"] = log[:10]
+            _record_status_entry(self.state, entry, drone_id=self.drone_id)
 
     def _telemetry_payload(self):
         """Build the payload that matches the swarmsim schema."""
@@ -417,6 +956,7 @@ class MqttPublisher:
             "latitude":    s["latitude"],
             "longitude":   s["longitude"],
             "altitude_m":  s["altitude_m"],
+            "relative_alt_m": s["relative_alt_m"],
             # ── Motion ───────────────────────────────────────
             "velocity_mps":  s["velocity_mps"],
             "speed_mps":     s["speed_mps"],
@@ -503,6 +1043,7 @@ def print_status(state, lock, drone_id, broker, hz, start_time):
     lat     = f"{s['latitude']:.6f}"  if s["latitude"]  is not None else "?"
     lon     = f"{s['longitude']:.6f}" if s["longitude"] is not None else "?"
     alt     = f"{s['altitude_m']:.1f}m" if s["altitude_m"] is not None else "?"
+    rel_alt = f"{s['relative_alt_m']:.1f}m" if s["relative_alt_m"] is not None else "?"
     v       = f"{s['voltage_v']:.2f}V"  if s["voltage_v"]  is not None else "?"
     pct     = f"{s['battery_pct']}%"
     spd     = f"{s['velocity_mps']:.2f}m/s"
@@ -518,9 +1059,10 @@ def print_status(state, lock, drone_id, broker, hz, start_time):
     print(f"  MQTT publishing to:  fleet/{drone_id}/telemetry")
     print(f"                       fleet/{drone_id}/status")
     print(f"  MQTT commands:       fleet/{drone_id}/command")
+    print(f"  MQTT missions:       fleet/{drone_id}/mission")
     print()
     print("  ── Telemetry ────────────────────────────────────────────────")
-    print(f"  Position    lat={lat}  lon={lon}  alt={alt}")
+    print(f"  Position    lat={lat}  lon={lon}  alt={alt}  rel={rel_alt}")
     print(f"  Battery     {v}  {pct}  current={s['current_a']}A")
     print(f"  GPS         fix={s['gps_fix']}  sats={s['satellites_visible']}")
     print(f"  EKF         {ekf}   Vibe x={s['vibe_x']} y={s['vibe_y']} z={s['vibe_z']}")
@@ -550,10 +1092,11 @@ class DroneSession:
         self.port       = port
         self.baud       = baud
         self.state      = _empty_state()
+        self.state["enable_run_log"] = True
         self.lock       = threading.Lock()
         self.start_time = None
         self.connected  = False
-        self.proc = MavlinkProcessor(port, baud, self.state, self.lock)
+        self.proc = MavlinkProcessor(port, baud, self.state, self.lock, drone_id=drone_id)
         self.pub  = MqttPublisher(broker, mqtt_port, drone_id, hz, self.state, self.lock, self.proc)
 
     def connect(self) -> bool:
@@ -668,6 +1211,7 @@ Examples:
     print("╚══════════════════════════════════════════════════════════════╝")
     print()
     print("  ⚠️  Make sure Mission Planner is CLOSED (port conflict).")
+    print(f"  Run log file: {RUN_LOG_PATH}")
     print()
 
     # ── Build port list ────────────────────────────────────────────────────────

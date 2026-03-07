@@ -39,8 +39,10 @@ a:hover { text-decoration: underline; }
 
 ul, ol { list-style: none; }
 
-/* Leaflet map dark filter */
-.leaflet-tile-pane { filter: brightness(0.7) contrast(1.1) saturate(0.8); }
+/* Leaflet map dark filter — only applied when NOT in satellite mode.
+   Satellite (Esri) tiles look best without filtering.
+   Apply .leaflet-satellite to the MapContainer wrapper to skip the filter. */
+.leaflet-tile-pane { filter: none; }
 
 /* Leaflet popup override */
 .leaflet-popup-content-wrapper {

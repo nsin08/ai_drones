@@ -22,6 +22,7 @@ from .health_service import HealthService
 from .mission_service import MissionService
 from .preflight import PreflightService
 from .service_status import ServiceStatusService
+from .waypoint_uploader import WaypointUploader
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class ServiceContainer:
     preflight_service: PreflightService
     command_service: CommandService
     mission_service: MissionService
+    waypoint_uploader: WaypointUploader
     event_replay_service: EventReplayService
     health_service: HealthService
     ws_manager: WebSocketManager
@@ -156,15 +158,22 @@ def get_service_container() -> ServiceContainer:
                             )
                     except Exception:
                         pass
+            elif topic == "fleet/system/mission_ack":
+                ws_manager.broadcast_sync("mission_ack", data)
 
         mqtt_client.set_message_callback(_on_mqtt_message)
         mqtt_client.subscribe("fleet/+/telemetry")
         mqtt_client.subscribe("fleet/+/status")
         mqtt_client.subscribe("fleet/system/command_ack")
+        mqtt_client.subscribe("fleet/system/mission_ack")
         mqtt_client.connect()
     mission_service = MissionService(
         mission_repo=mission_repo,
         event_repo=event_repo,
+    )
+    waypoint_uploader = WaypointUploader(
+        event_repo=event_repo,
+        mqtt_client=mqtt_client,
     )
     event_replay_service = EventReplayService()
     health_service = HealthService(
@@ -182,6 +191,7 @@ def get_service_container() -> ServiceContainer:
         preflight_service=preflight_service,
         command_service=command_service,
         mission_service=mission_service,
+        waypoint_uploader=waypoint_uploader,
         event_replay_service=event_replay_service,
         health_service=health_service,
         ws_manager=ws_manager,

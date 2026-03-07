@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 export const useSelectionStore = create((set, get) => ({
   selected: new Set(),
+  selectedDroneId: null, // for mission assignment (single drone)
 
   toggle: (id) =>
     set((s) => {
@@ -16,4 +17,9 @@ export const useSelectionStore = create((set, get) => ({
   isSelected: (id) => get().selected.has(id),
   count: () => get().selected.size,
   ids: () => [...get().selected],
+
+  // Mission assignment: select a single drone
+  selectDroneForMission: (droneId) => set({ selectedDroneId: droneId }),
+  clearDroneSelection: () => set({ selectedDroneId: null }),
+  getSelectedDrone: () => get().selectedDroneId,
 }));
