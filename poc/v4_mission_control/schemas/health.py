@@ -15,6 +15,8 @@ class HealthResponse(BaseModel):
     # W15: live connectivity state (None when unknown / not yet polled)
     mqtt_connected: bool | None = None
     inventory_available: bool | None = None
+    # W10: auth mode visible to the demo presenter (Settings page)
+    auth_enabled: bool = False
 
 
 class DroneHealthResult(BaseModel):

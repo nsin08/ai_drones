@@ -135,6 +135,7 @@ def read_health(
         timestamp=_utc_now_iso(),
         mqtt_connected=svc["mqtt"],
         inventory_available=svc["inventory"],
+        auth_enabled=settings.AUTH_ENABLED,
     )
 
 

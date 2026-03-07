@@ -712,3 +712,100 @@ class TestRadToDeg:
     def test_negative(self):
         import math
         assert abs(_rad2deg(-math.pi) - (-180.0)) < 0.001
+
+
+# ─── RC channel override (throttle-nudge elimination) ─────────────────────────
+
+class TestAutoArmRcOverride:
+    """
+    Verify that _auto_arm_and_start() sends rc_channels_override_send with
+    throttle neutral (1000 PWM, chan3) before switching to AUTO mode.
+
+    This eliminates the need for a physical RC throttle nudge after upload.
+    ArduPilot requires a live throttle signal before accepting a MAVLink-
+    armed AUTO takeoff; the override satisfies that check in software.
+    """
+
+    def _make_publisher(self, *, armed: bool = True):
+        """Return an MqttPublisher with mocked MAVLink connection and MQTT client."""
+        state = _empty_state()
+        state["armed"] = armed  # pre-set so arm-confirmation loop exits immediately
+        lock = threading.Lock()
+
+        mock_conn = MagicMock()
+        mock_proc = MagicMock()
+        mock_proc.conn = mock_conn
+
+        pub = MqttPublisher.__new__(MqttPublisher)
+        pub.state = state
+        pub.lock = lock
+        pub.drone_id = "HW-001"
+        pub.processor = mock_proc
+        pub._status_log = []
+        pub._append_status_log = lambda msg: pub._status_log.append(msg)
+        pub._wait_for_mode = MagicMock(return_value=True)
+        pub._trace_takeoff_window = MagicMock()  # don't spin a real trace thread
+
+        return pub, mock_conn
+
+    def test_rc_override_sent_before_auto(self):
+        """rc_channels_override_send must be called before set_mode('AUTO')."""
+        pub, mock_conn = self._make_publisher(armed=True)
+        call_order = []
+        mock_conn.mav.rc_channels_override_send.side_effect = (
+            lambda *a, **kw: call_order.append("rc_override")
+        )
+        mock_conn.set_mode.side_effect = lambda m: call_order.append(f"set_mode:{m}")
+
+        with patch("time.sleep"):
+            pub._auto_arm_and_start()
+
+        assert "rc_override" in call_order, "rc_channels_override_send was never called"
+        assert "set_mode:AUTO" in call_order, "set_mode(AUTO) was never called"
+        rc_idx = call_order.index("rc_override")
+        auto_idx = call_order.index("set_mode:AUTO")
+        assert rc_idx < auto_idx, "rc_override must be sent before set_mode(AUTO)"
+
+    def test_rc_override_throttle_channel_is_neutral(self):
+        """Throttle channel (chan3, positional index 4) must be 1000 (neutral)."""
+        pub, mock_conn = self._make_publisher(armed=True)
+
+        with patch("time.sleep"):
+            pub._auto_arm_and_start()
+
+        mock_conn.mav.rc_channels_override_send.assert_called_once()
+        args = mock_conn.mav.rc_channels_override_send.call_args[0]
+        # (target_system, target_component, chan1, chan2, chan3, chan4, chan5, chan6, chan7, chan8)
+        #  index 0         index 1           idx2   idx3  idx4  ...
+        assert len(args) >= 5, "Expected ≥5 positional args"
+        throttle_val = args[4]  # chan3 is index 4
+        assert throttle_val == 1000, (
+            f"Throttle override must be 1000 (neutral), got {throttle_val}"
+        )
+
+    def test_rc_override_other_channels_are_passthrough(self):
+        """All non-throttle channels must be 0 (pass-through, not overriding RC)."""
+        pub, mock_conn = self._make_publisher(armed=True)
+
+        with patch("time.sleep"):
+            pub._auto_arm_and_start()
+
+        args = mock_conn.mav.rc_channels_override_send.call_args[0]
+        # args: (sys, comp, ch1, ch2, ch3, ch4, ch5, ch6, ch7, ch8)
+        # skip ch3 at index 4
+        passthrough = list(args[2:4]) + list(args[5:])
+        for i, val in enumerate(passthrough):
+            assert val == 0, (
+                f"Non-throttle channel at result-index {i} must be 0, got {val}"
+            )
+
+    def test_auto_arm_aborts_if_arm_not_confirmed(self):
+        """If arm is not confirmed within timeout, AUTO and RC override must not fire."""
+        pub, mock_conn = self._make_publisher(armed=False)  # never goes armed
+
+        with patch("time.sleep"):
+            pub._auto_arm_and_start()
+
+        mode_calls = [c[0][0] for c in mock_conn.set_mode.call_args_list]
+        assert "AUTO" not in mode_calls, "AUTO must not be set if arm not confirmed"
+        mock_conn.mav.rc_channels_override_send.assert_not_called()

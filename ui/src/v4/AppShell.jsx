@@ -10,6 +10,7 @@ const DEFAULT_SERVICE_STATUS = {
   database: false,
   inventory: false,
   environment: V4_ENVIRONMENT,
+  auth_enabled: false,
 };
 
 const POLL_INTERVAL_MS = 5000;
@@ -31,6 +32,8 @@ async function fetchServiceStatus() {
     inventory: data.inventory_available ?? false,
     // If the API responds the DB is reachable (backend requires DB on every request)
     database: true,
+    auth_enabled: data.auth_enabled ?? false,
+    environment: data.environment,
   };
 }
 

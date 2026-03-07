@@ -13,6 +13,7 @@ function StatusDot({ connected }) {
 
 export default function SettingsPage() {
   const { serviceStatus = {}, operator = null } = useOutletContext() || {};
+  const authEnabled = serviceStatus.auth_enabled ?? false;
 
   return (
     <section className="v4-page">
@@ -24,7 +25,17 @@ export default function SettingsPage() {
             Live deployment health from the backend. Safety thresholds are pinned defaults.
           </p>
         </div>
-        <span className="v4-inline-badge">Environment {V4_ENVIRONMENT}</span>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span className="v4-inline-badge">Environment {serviceStatus.environment || V4_ENVIRONMENT}</span>
+          <span style={{
+            padding: '4px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 600,
+            background: authEnabled ? 'rgba(52,211,153,0.15)' : 'rgba(251,191,36,0.15)',
+            color: authEnabled ? '#34d399' : '#fbbf24',
+            border: `1px solid ${authEnabled ? '#34d399' : '#fbbf24'}`,
+          }}>
+            Auth: {authEnabled ? 'ENABLED' : 'BYPASS'}
+          </span>
+        </div>
       </header>
 
       <PageSection title="Deployment Health" eyebrow="Live">

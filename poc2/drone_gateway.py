@@ -630,11 +630,39 @@ class MqttPublisher:
             self._append_status_log("[WARN] Arm not confirmed within 4s")
             return
 
-        self._append_status_log("[NOTICE] Armed in STABILIZE — switching to AUTO")
+        self._append_status_log("[NOTICE] Armed in STABILIZE — sending RC throttle neutral override")
         time.sleep(0.2)
 
-        # 4. Switch to AUTO — now that we're armed and the mission pointer
-        #    targets seq 1 (the TAKEOFF), the mission can begin
+        # 4a. RC_CHANNELS_OVERRIDE — throttle neutral (1000 PWM, chan3).
+        #     ArduPilot requires a live RC throttle signal before accepting an
+        #     autonomous takeoff, even when armed by GCS MAVLink.  Sending a
+        #     single override frame satisfies the check without physical RC input.
+        #     Channel values:
+        #       0 = pass-through (ignore; FC uses real RC value)
+        #       1000 = explicit neutral/minimum for throttle
+        #     We set chan3=1000, all others=0 (pass-through), then let the
+        #     override expire naturally once AUTO mode activates (≤1 s).
+        try:
+            conn.mav.rc_channels_override_send(
+                conn.target_system,
+                conn.target_component,
+                0,     # chan1  roll    — pass-through
+                0,     # chan2  pitch   — pass-through
+                1000,  # chan3  throttle — neutral
+                0,     # chan4  yaw     — pass-through
+                0,     # chan5
+                0,     # chan6
+                0,     # chan7
+                0,     # chan8
+            )
+            self._append_status_log("[NOTICE] RC throttle override sent (neutral) — switching to AUTO")
+        except Exception as e:
+            self._append_status_log(f"[WARN] RC override send failed: {e} — proceeding anyway")
+
+        time.sleep(0.15)  # brief settle before mode switch
+
+        # 4b. Switch to AUTO — now that we're armed and the mission pointer
+        #     targets seq 1 (the TAKEOFF), the mission can begin.
         try:
             conn.set_mode("AUTO")
         except Exception as e:
