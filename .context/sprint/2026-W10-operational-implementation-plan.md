@@ -688,10 +688,44 @@ As an operator or demo presenter, I can quickly verify service health and demons
 
 ---
 
+## Implementation Notes
+
+### RC Throttle Nudge — ArduPilot Hardware Behavior (2026-03-07)
+
+**Observed:** After the full DEBUG sequence wireup (Takeoff → Hold → Spin → Hold → RTL) is uploaded
+and `_auto_arm_and_start` runs the `STABILIZE → ARM → AUTO` sequence, the flight controller still
+waits for a physical RC throttle position change before beginning AUTO mission execution.
+
+**Root cause:** ArduPilot's pre-arm / post-arm checks require a radio-control throttle signal
+within a narrow neutral range (≈ 1000–1100 PWM) to confirm the channel is live before accepting
+an autonomous takeoff command. This applies even when armed by GCS MAVLink.
+
+**Software fix (implemented in `feature/w10-commands-settings-rcoverride`):**
+Send a `RC_CHANNELS_OVERRIDE` MAVLink message immediately after arm confirmation, setting the
+throttle channel to neutral (1000 PWM). This satisfies the FC's throttle-live check without any
+physical RC input. The override is sent once, then allowed to expire (1.0 s timeout via SYSID_MYGCS)
+so normal autonomous control takes over for the actual takeoff.
+
+**Sequence post-fix:**
+1. Upload waypoints (mission items 0–N)
+2. `set_mode("STABILIZE")`
+3. `MAV_CMD_COMPONENT_ARM_DISARM` (force)
+4. Wait → arm confirmed
+5. **`RC_CHANNELS_OVERRIDE` — throttle neutral (1000 PWM), all other channels 0 (pass-through)**
+6. `set_mode("AUTO")`
+7. Mission executes — no physical RC nudge required
+
+**File:** `poc2/drone_gateway.py` → `_auto_arm_and_start()`
+
+---
+
 ## Immediate Next Actions
 
 1. ✅ Phase 3 (WP-05, WP-06, WP-07) is COMPLETE and committed to `feature/w10-waypoint-upload`.
-2. Merge `feature/w10-waypoint-upload` into `develop` after review.
-3. Implement WP-08 (Commands page backend integration) and WP-09 (Settings live health).
-4. Validate the end-to-end PATROL demo with auth-enabled (`MC_V4_AUTH_ENABLED=true`).
+2. ✅ `feature/w10-waypoint-upload` merged into `develop`.
+3. Active branch: `feature/w10-commands-settings-rcoverride`
+   - RC throttle override fix (eliminate manual nudge)
+   - WP-08 Commands page backend integration
+   - WP-09 Settings live health page
+4. Validate end-to-end PATROL demo with auth-enabled (`MC_V4_AUTH_ENABLED=true`).
 5. Test role-based restrictions with `ADMIN`, `PILOT`, and `OBSERVER` credentials.
