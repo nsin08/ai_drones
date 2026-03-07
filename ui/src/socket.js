@@ -76,22 +76,48 @@ function dispatch(event, data) {
       });
       break;
     case 'mission_changed':
-    case 'mission_state':
-      useMissionStore.getState().setMissionInfo(data);
+    case 'mission_state': {
+      const store = useMissionStore.getState();
+      store.setMissionInfo(data);
+      // Also update the mission in the missions list if present
+      if (data.mission_id && data.mission_state) {
+        store.upsertMission({
+          mission_id: data.mission_id,
+          status: data.mission_state,
+          type: data.mission_type || data.current_mission,
+        });
+      }
       if (data.mission_state === 'ACTIVE') useFleetStore.getState().resetTrails();
       useEventStore.getState().addEvent({
         type: 'MISSION',
         message: `Mission -> ${data.mission_state || data.mission_type}`,
       });
       break;
+    }
     case 'mission_ack':
-      // Acknowledge: mission successfully uploaded to drone
+      // Acknowledge: mission upload result from drone gateway
       if (data.mission_id) {
-        useMissionStore.getState().addUploadedMission(data.mission_id);
+        const result = (data.result || data.status || '').toUpperCase();
+        if (result === 'OK' || result === 'UPLOADED' || result === 'SUCCESS') {
+          useMissionStore.getState().addUploadedMission(data.mission_id);
+          useMissionStore.getState().recordUploadResult(data.mission_id, {
+            result: 'OK',
+            detail: data.detail || 'Waypoints uploaded',
+            drone_id: data.drone_id,
+            timestamp: Date.now(),
+          });
+        } else {
+          useMissionStore.getState().recordUploadResult(data.mission_id, {
+            result: 'FAILED',
+            detail: data.detail || 'Upload failed',
+            drone_id: data.drone_id,
+            timestamp: Date.now(),
+          });
+        }
       }
       useEventStore.getState().addEvent({
         type: 'MISSION',
-        message: `Mission ACK from ${data.drone_id}: ${data.status || 'uploaded'}`,
+        message: `Mission ACK from ${data.drone_id}: ${data.result || data.status || 'unknown'} — ${data.detail || ''}`,
       });
       console.log('[WS] mission_ack:', data);
       break;

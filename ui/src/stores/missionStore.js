@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export const useMissionStore = create((set) => ({
+export const useMissionStore = create((set, get) => ({
   missionType: null,       // PATROL | PERIMETER | ESCORT
   missionState: 'IDLE',    // IDLE|PLANNING|PLANNED|ACTIVE|PAUSED|ABORTED|COMPLETED
   missionId: null,
@@ -19,6 +19,7 @@ export const useMissionStore = create((set) => ({
   // Fetched mission history
   missions: [],            // [{mission_id, type, status, tasks, created_at, ...}]
   uploadedMissions: new Set(), // mission_ids that have been ACK'd by drones
+  uploadResults: {},        // { [mission_id]: { result: 'OK'|'FAILED', detail, drone_id, timestamp } }
 
   setMissionType: (t) => set({ missionType: t, missionState: 'PLANNING' }),
   setMissionState: (s) => set({ missionState: s }),
@@ -32,6 +33,23 @@ export const useMissionStore = create((set) => ({
     return { uploadedMissions: updated };
   }),
   isMissionUploaded: (missionId) => get().uploadedMissions.has(missionId),
+
+  /** Record a mission_ack result (OK or FAILED) from the drone gateway. */
+  recordUploadResult: (missionId, result) => set((state) => ({
+    uploadResults: { ...state.uploadResults, [missionId]: result },
+  })),
+
+  /** Update a single mission in the missions list. Adds if not present. */
+  upsertMission: (mission) => set((state) => {
+    const idx = state.missions.findIndex((m) => m.mission_id === mission.mission_id);
+    const updated = [...state.missions];
+    if (idx >= 0) {
+      updated[idx] = { ...updated[idx], ...mission };
+    } else {
+      updated.unshift(mission);
+    }
+    return { missions: updated };
+  }),
 
   setMissionInfo: (data) =>
     set((prev) => ({

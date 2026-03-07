@@ -2,6 +2,7 @@ import { useFleetStore } from '../../stores/fleetStore.js';
 import { useMissionStore } from '../../stores/missionStore.js';
 import { useUIStore } from '../../stores/uiStore.js';
 import { missionStoreSnapshotFromList, transitionMission } from '../lib/apiClient.js';
+import { readStoredSession } from '../auth/session.js';
 
 const STATE_COLORS = Object.freeze({
   IDLE: '#64748b',
@@ -31,6 +32,7 @@ export default function MissionBar() {
 
   const totalDrones = Object.keys(drones).length;
   const activeDrones = Object.values(drones).filter((drone) => drone.status === 'ACTIVE').length;
+  const isObserver = readStoredSession()?.role === 'OBSERVER';
 
   async function applyTransition(action, body = {}) {
     if (!missionId) return;
@@ -91,7 +93,10 @@ export default function MissionBar() {
       </div>
 
       <div className="v4-mission-bar__actions">
-        {missionState === 'PLANNED' && (
+        {isObserver && (
+          <span className="v4-inline-badge" style={{ color: '#9ca3af', fontStyle: 'italic' }}>View Only</span>
+        )}
+        {!isObserver && missionState === 'PLANNED' && (
           <button
             type="button"
             className="v4-mission-bar__btn v4-mission-bar__btn--primary"
@@ -102,7 +107,7 @@ export default function MissionBar() {
             {uploadedMissions.has(missionId) ? 'Start' : 'Waiting for ACK...'}
           </button>
         )}
-        {missionState === 'ACTIVE' && (
+        {!isObserver && missionState === 'ACTIVE' && (
           <button
             type="button"
             className="v4-mission-bar__btn"
@@ -112,7 +117,7 @@ export default function MissionBar() {
             Pause
           </button>
         )}
-        {missionState === 'PAUSED' && (
+        {!isObserver && missionState === 'PAUSED' && (
           <button
             type="button"
             className="v4-mission-bar__btn"
@@ -122,7 +127,7 @@ export default function MissionBar() {
             Resume
           </button>
         )}
-        {['PLANNED', 'ACTIVE', 'PAUSED'].includes(missionState) && (
+        {!isObserver && ['PLANNED', 'ACTIVE', 'PAUSED'].includes(missionState) && (
           <button
             type="button"
             className="v4-mission-bar__btn v4-mission-bar__btn--danger"

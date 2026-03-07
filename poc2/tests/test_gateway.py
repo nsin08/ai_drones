@@ -400,6 +400,7 @@ class TestMissionExecution:
         pub.processor.conn.target_system = 1
         pub.processor.conn.target_component = 1
         pub.processor.conn.mav = MagicMock()
+        pub.processor.upload_queue = None
         return pub
 
     def test_mission_rejected_without_waypoints(self):
@@ -413,19 +414,216 @@ class TestMissionExecution:
     def test_mission_upload_sends_count_and_items(self):
         pub = self._mission_pub()
 
+        class _MissionMsg:
+            def __init__(self, msg_type, *, seq=None, ack_type=0):
+                self._msg_type = msg_type
+                self.seq = seq
+                self.type = ack_type
+
+            def get_type(self):
+                return self._msg_type
+
+        def _feed_upload_handshake():
+            for _ in range(50):
+                q = pub.processor.upload_queue
+                if q is not None:
+                    q.put(_MissionMsg("MISSION_REQUEST_INT", seq=0))
+                    q.put(_MissionMsg("MISSION_REQUEST_INT", seq=1))
+                    q.put(_MissionMsg("MISSION_REQUEST_INT", seq=2))
+                    q.put(_MissionMsg("MISSION_ACK", ack_type=0))
+                    return
+                time.sleep(0.01)
+
+        feeder = threading.Thread(target=_feed_upload_handshake, daemon=True)
+        feeder.start()
+
+        def _count_send(*args, **kwargs):
+            assert pub.processor.upload_queue is not None
+
+        pub.processor.conn.mav.mission_count_send.side_effect = _count_send
+
         ack = pub._execute_mission({
             "mission_id": "m2",
             "task_id": "t2",
             "drone_id": "HW-001",
             "waypoints": [
-                {"lat": 12.34, "lon": 56.78, "alt_m": 40},
-                {"lat": 12.35, "lon": 56.79, "alt_m": 45},
+                {"lat": 12.34, "lon": 56.78, "alt_m": 40, "cmd": 22},
+                {"lat": 12.35, "lon": 56.79, "alt_m": 45, "cmd": 16},
             ],
         })
 
         assert ack["result"] == "OK"
         pub.processor.conn.mav.mission_count_send.assert_called_once()
-        assert pub.processor.conn.mav.mission_item_int_send.call_count == 2
+        count_args = pub.processor.conn.mav.mission_count_send.call_args.args
+        assert count_args[2] == 3
+        assert pub.processor.conn.mav.mission_item_send.call_count == 3
+        pub.processor.conn.mav.mission_set_current_send.assert_called_once_with(1, 1, 1)
+
+    def test_mission_upload_ignores_clear_all_ack_before_requests(self):
+        pub = self._mission_pub()
+
+        class _MissionMsg:
+            def __init__(self, msg_type, *, seq=None, ack_type=0):
+                self._msg_type = msg_type
+                self.seq = seq
+                self.type = ack_type
+
+            def get_type(self):
+                return self._msg_type
+
+        def _feed_clear_ack_then_upload():
+            for _ in range(50):
+                q = pub.processor.upload_queue
+                if q is not None:
+                    q.put(_MissionMsg("MISSION_ACK", ack_type=0))
+                    q.put(_MissionMsg("MISSION_REQUEST_INT", seq=0))
+                    q.put(_MissionMsg("MISSION_REQUEST_INT", seq=1))
+                    q.put(_MissionMsg("MISSION_REQUEST_INT", seq=2))
+                    q.put(_MissionMsg("MISSION_ACK", ack_type=0))
+                    return
+                time.sleep(0.01)
+
+        threading.Thread(target=_feed_clear_ack_then_upload, daemon=True).start()
+
+        ack = pub._execute_mission({
+            "mission_id": "m2b",
+            "task_id": "t2b",
+            "drone_id": "HW-001",
+            "waypoints": [
+                {"lat": 12.34, "lon": 56.78, "alt_m": 40, "cmd": 22},
+                {"lat": 12.35, "lon": 56.79, "alt_m": 45, "cmd": 16},
+            ],
+        })
+
+        assert ack["result"] == "OK"
+        assert pub.processor.conn.mav.mission_item_send.call_count == 3
+
+    def test_mission_upload_normalizes_takeoff_to_relative_alt_frame(self):
+        pub = self._mission_pub()
+
+        class _MissionMsg:
+            def __init__(self, msg_type, *, seq=None, ack_type=0):
+                self._msg_type = msg_type
+                self.seq = seq
+                self.type = ack_type
+
+            def get_type(self):
+                return self._msg_type
+
+        def _feed_upload_takeoff_only():
+            for _ in range(50):
+                q = pub.processor.upload_queue
+                if q is not None:
+                    q.put(_MissionMsg("MISSION_REQUEST_INT", seq=0))
+                    q.put(_MissionMsg("MISSION_REQUEST_INT", seq=1))
+                    q.put(_MissionMsg("MISSION_ACK", ack_type=0))
+                    return
+                time.sleep(0.01)
+
+        threading.Thread(target=_feed_upload_takeoff_only, daemon=True).start()
+
+        ack = pub._execute_mission({
+            "mission_id": "m2c",
+            "task_id": "t2c",
+            "drone_id": "HW-001",
+            "waypoints": [
+                {"lat": 12.34, "lon": 56.78, "alt_m": 10, "cmd": 22, "frame": 6},
+            ],
+        })
+
+        assert ack["result"] == "OK"
+        item_args = pub.processor.conn.mav.mission_item_send.call_args.args
+        assert item_args[3] == 3
+        assert item_args[4] == 22
+
+    def test_mission_upload_fails_without_final_ack(self):
+        pub = self._mission_pub()
+
+        class _MissionMsg:
+            def __init__(self, msg_type, *, seq=None, ack_type=0):
+                self._msg_type = msg_type
+                self.seq = seq
+                self.type = ack_type
+
+            def get_type(self):
+                return self._msg_type
+
+        def _feed_upload_requests_only():
+            for _ in range(50):
+                q = pub.processor.upload_queue
+                if q is not None:
+                    q.put(_MissionMsg("MISSION_REQUEST_INT", seq=0))
+                    q.put(_MissionMsg("MISSION_REQUEST_INT", seq=1))
+                    return
+                time.sleep(0.01)
+
+        threading.Thread(target=_feed_upload_requests_only, daemon=True).start()
+
+        ack = pub._execute_mission({
+            "mission_id": "m4",
+            "task_id": "t4",
+            "drone_id": "HW-001",
+            "waypoints": [
+                {"lat": 12.34, "lon": 56.78, "alt_m": 40, "cmd": 22},
+            ],
+        })
+
+        assert ack["result"] == "FAILED"
+        assert "final ACK" in ack["detail"]
+
+    def test_mission_upload_retries_with_legacy_clear_when_fc_stays_silent(self):
+        pub = self._mission_pub()
+
+        class _MissionMsg:
+            def __init__(self, msg_type, *, seq=None, ack_type=0):
+                self._msg_type = msg_type
+                self.seq = seq
+                self.type = ack_type
+
+            def get_type(self):
+                return self._msg_type
+
+        send_counts = {"count": 0}
+
+        def _count_send(*args, **kwargs):
+            send_counts["count"] += 1
+            if send_counts["count"] == 3:
+                q = pub.processor.upload_queue
+                assert q is not None
+                q.put(_MissionMsg("MISSION_ACK", ack_type=0))
+                q.put(_MissionMsg("MISSION_REQUEST_INT", seq=0))
+                q.put(_MissionMsg("MISSION_REQUEST_INT", seq=1))
+                q.put(_MissionMsg("MISSION_ACK", ack_type=0))
+
+        pub.processor.conn.mav.mission_count_send.side_effect = _count_send
+
+        ack = pub._execute_mission({
+            "mission_id": "m4b",
+            "task_id": "t4b",
+            "drone_id": "HW-001",
+            "waypoints": [
+                {"lat": 12.34, "lon": 56.78, "alt_m": 40, "cmd": 22},
+            ],
+        })
+
+        assert ack["result"] == "OK"
+        assert send_counts["count"] >= 3
+        pub.processor.conn.mav.mission_clear_all_send.assert_called_once()
+
+    def test_mission_upload_requires_takeoff_as_first_runnable_item(self):
+        pub = self._mission_pub()
+
+        ack = pub._execute_mission({
+            "mission_id": "m5",
+            "task_id": "t5",
+            "drone_id": "HW-001",
+            "waypoints": [
+                {"lat": 12.34, "lon": 56.78, "alt_m": 40, "cmd": 16},
+            ],
+        })
+
+        assert ack["result"] == "FAILED"
+        assert "MAV_CMD_NAV_TAKEOFF" in ack["detail"]
 
     def test_handle_mission_message_publishes_ack(self):
         pub = self._mission_pub()

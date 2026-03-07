@@ -10,9 +10,13 @@
  */
 
 import 'leaflet/dist/leaflet.css';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { MapContainer, Marker, Polygon, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+
+// Esri World Imagery satellite — no API key required
+const SATELLITE_URL = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const SATELLITE_ATTR = 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
 
 // Fix Leaflet's default icon path broken by Vite's asset hashing
 delete L.Icon.Default.prototype._getIconUrl;
@@ -55,23 +59,39 @@ function InvalidateMapSize() {
   return null;
 }
 
-export default function MissionBuilderMap({ waypoints = [], geofence = [], onMapClick, mode = 'waypoint' }) {
+/** Fly to center when a valid drone position becomes available — fires once only. */
+function FlyToCenter({ center }) {
+  const map = useMap();
+  const hasCentered = useRef(false);
+  useEffect(() => {
+    if (!hasCentered.current && center && center[0] !== 0 && center[1] !== 0) {
+      map.setView(center, 16, { animate: true });
+      hasCentered.current = true;
+    }
+  }, [map, center]);
+  return null;
+}
+
+export default function MissionBuilderMap({ waypoints = [], geofence = [], onMapClick, mode = 'waypoint', center = null }) {
   const geofencePositions = geofence.map((p) => [p.lat, p.lng]);
   const cursor = mode === 'geofence' ? 'crosshair' : 'pointer';
+  const initialCenter = center ?? [20, 0];
+  const initialZoom = center ? 16 : 2;
+
+  // Only render map markers for waypoints that have real coordinates
+  const positionedWaypoints = waypoints.filter((wp) => wp.lat !== 0 || wp.lng !== 0);
 
   return (
     <div style={{ height: '420px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e5e7eb', cursor }}>
       <MapContainer
-        center={[32.08, 34.78]}
-        zoom={14}
+        center={initialCenter}
+        zoom={initialZoom}
         style={{ height: '100%', width: '100%', cursor }}
       >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://openstreetmap.org">OpenStreetMap</a> contributors'
-        />
+        <TileLayer url={SATELLITE_URL} attribution={SATELLITE_ATTR} maxZoom={19} />
 
         <InvalidateMapSize />
+        <FlyToCenter center={center} />
         <ClickCapture onMapClick={onMapClick} />
 
         {geofencePositions.length >= 3 && (
@@ -84,10 +104,10 @@ export default function MissionBuilderMap({ waypoints = [], geofence = [], onMap
           </Marker>
         ))}
 
-        {waypoints.map((wp, idx) => (
+        {positionedWaypoints.map((wp, idx) => (
           <Marker key={wp.id} position={[wp.lat, wp.lng]}>
             <Popup>
-              <strong>WP{idx + 1}</strong>
+              <strong>{wp._label || `WP${idx + 1}`}</strong>
               <br />
               {wp.lat.toFixed(5)}, {wp.lng.toFixed(5)}
               <br />
